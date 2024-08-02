@@ -3,6 +3,8 @@ import os
 from tqdm import tqdm
 import logging
 import numpy as np
+import pyarrow as pa
+import pyarrow.parquet as pq
 
 # Set up logging configuration
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -18,8 +20,8 @@ def load_data():
     Returns:
     tuple: A tuple containing two pandas DataFrames (timeline_df, stocks_df)
     """
-    timeline_df = pd.read_csv('./data/NIFTY500_2010_2020.csv')
-    stocks_df = pd.read_csv('./data/stocks_df.csv')
+    timeline_df = pd.read_csv('../../data/NIFTY500_2010_2020.csv')
+    stocks_df = pd.read_csv('../../data/stocks_df.csv')
     logging.info("Data loaded...")
     return timeline_df, stocks_df
 
@@ -68,13 +70,13 @@ def extract(timeline_df: pd.DataFrame, stocks_df: pd.DataFrame):
         return clipped_data.values
 
     # Read CSV file names from ./Datasets/SCRIP/
-    csv_files = [f.split('.')[0] for f in os.listdir('./Datasets/SCRIP') if f.endswith('.csv')]
+    csv_files = [f.split('.')[0] for f in os.listdir('../../Datasets/SCRIP') if f.endswith('.csv')]
     
     # Check which symbols are available in the SCRIP dataset
     available_in_scrip = set(unique_stock_symbols) & set(csv_files)
     
     for sym in tqdm(available_in_scrip, desc=f"Processing from SCRIP dataset {len(available_in_scrip)} out of {len(unique_stock_symbols)}"):
-        file_path = f'./Datasets/SCRIP/{sym}.csv'
+        file_path = f'../../Datasets/SCRIP/{sym}.csv'
         stock_data = pd.read_csv(file_path)
         stock_data = stock_data[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']]
         stock_data['Date'] = pd.to_datetime(stock_data['Date'])
@@ -117,7 +119,6 @@ def extract(timeline_df: pd.DataFrame, stocks_df: pd.DataFrame):
                     data.append(processed_data)
                     data_to_symbol[sym] = len(data) - 1
 
-    
     data = np.array(data)
     
     # Print symbols not found in either dataset
@@ -192,3 +193,5 @@ ext, map, dr, not_found_symbols = extract(timeline, stocks)
 # Use this function after print(not_found)
 final_df = merge_data(ext, map, dr, timeline)
 final_df.to_csv('NIFTY500_2010_2020_HISTORICAL.csv')
+table = pa.Table.from_pandas(final_df)
+pq.write_table(table, 'NIFTY500_2010_2020_HISTORICAL.parquet')
