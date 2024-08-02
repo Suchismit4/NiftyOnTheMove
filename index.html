@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta name="description" content="None">
+        
+        
+        <link rel="shortcut icon" href="img/favicon.ico">
+        <title>Starto</title>
+        <link href="css/bootstrap.min.css" rel="stylesheet">
+        <link href="css/fontawesome.min.css" rel="stylesheet">
+        <link href="css/brands.min.css" rel="stylesheet">
+        <link href="css/solid.min.css" rel="stylesheet">
+        <link href="css/v4-font-face.min.css" rel="stylesheet">
+        <link href="css/base.css" rel="stylesheet">
+        <link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" >
+        <link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github-dark.min.css" disabled>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+        <script>hljs.highlightAll();</script> 
+    </head>
+
+    <body class="homepage">
+        <div class="navbar fixed-top navbar-expand-lg navbar-dark bg-primary">
+            <div class="container">
+                <a class="navbar-brand" href=".">Starto</a>
+
+                <!-- Expanded navigation -->
+                <div id="navbar-collapse" class="navbar-collapse collapse">
+
+                    <ul class="nav navbar-nav ms-md-auto">
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" data-bs-toggle="modal" data-bs-target="#mkdocs_search_modal">
+                                <i class="fa fa-search"></i> Search
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="container">
+            <div class="row">
+                    <div class="col-md-3"><div class="navbar-expand-md bs-sidebar hidden-print affix" role="complementary">
+    <div class="navbar-header">
+        <button type="button" class="navbar-toggler collapsed" data-bs-toggle="collapse" data-bs-target="#toc-collapse" title="Table of Contents">
+            <span class="fa fa-angle-down"></span>
+        </button>
+    </div>
+
+    
+    <div id="toc-collapse" class="navbar-collapse collapse card bg-body-tertiary">
+        <ul class="nav flex-column">
+            
+            <li class="nav-item" data-bs-level="1"><a href="#getting-started-with-strato" class="nav-link">Getting Started with Strato</a>
+              <ul class="nav flex-column">
+            <li class="nav-item" data-bs-level="2"><a href="#table-of-contents" class="nav-link">Table of Contents</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#introduction" class="nav-link">Introduction</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#installation" class="nav-link">Installation</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#quick-start" class="nav-link">Quick Start</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#data-structures" class="nav-link">Data Structures</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#strategy" class="nav-link">Strategy</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#indicators" class="nav-link">Indicators</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#position" class="nav-link">Position</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#order" class="nav-link">Order</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#execution-loop-logic" class="nav-link">Execution Loop Logic</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#advanced-usage" class="nav-link">Advanced Usage</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+            <li class="nav-item" data-bs-level="2"><a href="#api-reference" class="nav-link">API Reference</a>
+              <ul class="nav flex-column">
+              </ul>
+            </li>
+              </ul>
+            </li>
+        </ul>
+    </div>
+</div></div>
+                    <div class="col-md-9" role="main">
+
+<h1 id="getting-started-with-strato">Getting Started with Strato</h1>
+<p>Welcome to the documentation for Strato, a comprehensive library for backtesting trading strategies. This document will guide you through the installation, setup, and usage of the Strato library.</p>
+<h2 id="table-of-contents">Table of Contents</h2>
+<ol>
+<li><a href="#introduction">Introduction</a></li>
+<li><a href="#installation">Installation</a></li>
+<li><a href="#quick-start">Quick Start</a></li>
+<li><a href="#data-structures">Data Structures</a></li>
+<li><a href="#execution-loop-logic">Execution Loop Logic</a></li>
+<li><a href="#advanced-usage">Advanced Usage</a></li>
+<li><a href="#api-reference">API Reference</a></li>
+</ol>
+<h2 id="introduction">Introduction</h2>
+<p>Strato is a powerful and flexible backtesting framework designed to help you develop, test, and evaluate trading strategies. It supports complex trading strategies, indicator calculations, and performance tracking.</p>
+<h2 id="installation">Installation</h2>
+<p>To install Strato, you need to clone the repository and install the required dependencies.</p>
+<pre><code class="language-bash">git clone https://github.com/yourusername/strato.git
+cd strato
+pip install -r requirements.txt
+</code></pre>
+<h2 id="quick-start">Quick Start</h2>
+<p>Here is a quick example to get you started with Strato. This example demonstrates how to set up a moving average strategy and run a backtest.</p>
+<h3 id="example-mainpy">Example: <code>main.py</code></h3>
+<pre><code class="language-python">...imports
+
+class MovingAverage(Indicator):
+    def __init__(self, window: int):
+        self.window = window
+
+    def init(self, data: np.ndarray) -&gt; np.ndarray:
+        if data.shape[0] &lt; self.window:
+            return np.full((1,), np.nan)
+        data_slice_sum = data[:self.window].sum(axis=0)
+        moving_average = (data_slice_sum / self.window)
+        return (moving_average, self.window)
+
+    def step(self, current_value: np.ndarray, new_data: np.ndarray, previous_result: np.ndarray) -&gt; np.ndarray:
+        return previous_result + (new_data - current_value) / self.window
+
+class MovingAverageStrategy(Strategy):
+    def __init__(self, short_window: int, long_window: int):
+        super().__init__()
+        self.short_window = short_window
+        self.long_window = long_window
+        self.crossover_state: Dict[str, Optional[str]] = {}
+        self.initialized: Dict[str, bool] = {}
+
+    def generate_signals(self, date_idx: int, indicator_calculator: IndicatorCalculator, positions: Dict[str, Position], symbol_to_index: Dict[str, int]):
+        if date_idx &lt; self.long_window:
+            return  # Not enough data to generate signals
+
+        short_ma = indicator_calculator.get_indicator(f'MA_{self.short_window}')
+        long_ma = indicator_calculator.get_indicator(f'MA_{self.long_window}')
+        new_crossover_state = dict(self.crossover_state)
+        new_signals = {}
+
+        for symbol, symbol_idx in symbol_to_index.items():
+            short_mavg = short_ma[date_idx, symbol_idx]
+            long_mavg = long_ma[date_idx, symbol_idx]
+            if np.isnan(short_mavg) or np.isnan(long_mavg):
+                continue
+
+            if symbol not in self.initialized:
+                self.initialized[symbol] = False
+            current_state = new_crossover_state.get(symbol)
+
+            if not self.initialized[symbol]:  # Initialize crossover state without generating signals
+                if short_mavg &gt; long_mavg:
+                    new_crossover_state[symbol] = 'bullish'
+                elif short_mavg &lt; long_mavg:
+                    new_crossover_state[symbol] = 'bearish'
+                self.initialized[symbol] = True
+                new_signals[symbol] = self.HOLD  # No trading signal during initialization
+            else:  # Generate trading signals based on crossover
+                if short_mavg &gt; long_mavg and current_state != 'bullish':
+                    new_signals[symbol] = self.BUY
+                    new_crossover_state[symbol] = 'bullish'
+                elif short_mavg &lt; long_mavg and current_state != 'bearish':
+                    new_signals[symbol] = self.SELL
+                    new_crossover_state[symbol] = 'bearish'
+                else:
+                    new_signals[symbol] = self.HOLD
+
+        self.crossover_state = new_crossover_state
+        self.signals = new_signals
+
+def setup_logging():
+    ... your implementation goes here
+
+# Main execution
+if __name__ == &quot;__main__&quot;:
+    # Initialize the argument parser
+    parser = argparse.ArgumentParser(description=&quot;Main script for backtesting&quot;)
+    parser.add_argument(&quot;csv&quot;, help=&quot;The backtest data file paths&quot;, type=str, nargs='+')
+    parser.add_argument(&quot;--verbose&quot;, help=&quot;Dump detailed log&quot;, action='store_true')
+    args = parser.parse_args()
+
+    # Access the list of CSV paths
+    csv_paths = args.csv
+
+    # Print out the list of CSV paths (for debugging purposes)
+    if args.verbose:
+        print(f&quot;CSV paths provided: {csv_paths}&quot;)
+
+    data, symbol_to_index, feature_to_index, date_to_index, start_date, end_date, features = load_and_transform_csv(csv_paths)
+
+    # Call the setup_logging function at the start of your main script
+    if args.verbose:
+        setup_logging()
+
+    # Create strategy
+    strategy = MovingAverageStrategy(short_window=10, long_window=30)
+
+    # Create Strato instance
+    strato = Strato(data, symbol_to_index, feature_to_index, date_to_index, starting_cash=100000.0, trade_size=10, strategy=strategy)
+
+    # Add indicators
+    strato.add_indicator('MA_10', MovingAverage(10))
+    strato.add_indicator('MA_30', MovingAverage(30))
+
+    # Run backtest
+    results = strato.run_backtest()
+    print(f'Starting Portfolio Value: ₹{100000.00}')
+    print(f'Final Portfolio Value: ₹{results[-1]:.2f}')
+</code></pre>
+<h2 id="data-structures">Data Structures</h2>
+<h3 id="tensors">Tensors</h3>
+<p>In Strato, the primary data structure used is a tensor with the shape <code>T x N x J</code>, where:</p>
+<p><code>T</code> is the number of time steps (dates).
+<code>N</code> is the number of symbols (assets).
+<code>J</code> is the number of features (e.g., Open, High, Low, Close, Volume, Returns).</p>
+<p>This tensor structure allows efficient and flexible access to historical market data.</p>
+<h2 id="strategy">Strategy</h2>
+<p>A trading strategy in Strato is defined by extending the Strategy abstract base class. Strategies generate buy, sell, or hold signals based on the state of the market and the calculated indicators.</p>
+<h2 id="indicators">Indicators</h2>
+<p>Indicators are calculated using the Indicator abstract base class. Each indicator must implement the init and step methods to initialize and update the indicator values, respectively.</p>
+<h2 id="position">Position</h2>
+<p>A Position represents the quantity and price of a particular asset held in the portfolio. It supports buying and selling operations and calculates the current value and profit/loss of the position.</p>
+<h2 id="order">Order</h2>
+<p>An Order represents a buy or sell order for a specific asset. It includes details such as the order type, quantity, and execution logic.</p>
+<h2 id="execution-loop-logic">Execution Loop Logic</h2>
+<p>The main execution loop in Strato involves the following steps:</p>
+<ol>
+<li>Initialize Indicators: Calculate initial indicator values.</li>
+<li>Generate Signals: Based on the current market state and indicator values, generate trading signals.</li>
+<li>Execute Orders: Execute pending orders from the previous day.</li>
+<li>Calculate Portfolio Value: Compute the total value of the portfolio, including cash and positions.</li>
+<li>Process New Signals: Create new orders based on the generated signals.</li>
+</ol>
+<p>This loop continues for each time step in the historical data, simulating the execution of trades over time.</p>
+<h2 id="advanced-usage">Advanced Usage</h2>
+<h3 id="adding-custom-indicators">Adding Custom Indicators</h3>
+<p>To add a custom indicator, create a new class that inherits from Indicator and implement the required methods.</p>
+<pre><code class="language-python">class CustomIndicator(Indicator):
+    def init(self, data: np.ndarray) -&gt; Tuple[np.ndarray, int]:
+        # Initialization logic
+        pass
+
+    def step(self, current_value: np.ndarray, new_data: np.ndarray, previous_result: np.ndarray) -&gt; np.ndarray:
+        # Update logic
+        pass
+</code></pre>
+<h3 id="using-multiple-strategies">Using Multiple Strategies</h3>
+<p>You can also run backtests with multiple strategies by creating instances of different strategy classes and running them sequentially or in parallel.</p>
+<h2 id="api-reference">API Reference</h2>
+<h3 id="strato">Strato</h3>
+<p><code>__init__(self, data: np.ndarray, symbol_to_index: Dict[str, int], feature_to_index: Dict[str, int], date_to_index: Dict[datetime.datetime, int], starting_cash: float, trade_size: int, strategy: Strategy)</code></p>
+<p>Initialize the Strato backtesting environment.</p>
+<p><code>add_indicator(self, name: str, indicator: Indicator, column: str = 'Close')</code></p>
+<p>Add a new indicator to the backtesting environment.</p>
+<p><code>run_backtest(self) -&gt; List[float]</code></p>
+<p>Run the backtest simulation.</p>
+<p><code>generate_backtest_report(self, portfolio_values: np.ndarray, dates: List[datetime.datetime], daily_pnl: List[float], daily_cash: List[float], trade_history: List[Dict]) -&gt; str</code></p>
+<p>Generate a comprehensive backtest report.</p>
+<h3 id="strategy_1">Strategy</h3>
+<p><code>generate_signals(self, date_idx: int, indicator_calculator: IndicatorCalculator, positions: Dict[str, Position], symbol_to_index: Dict[str, int])</code></p>
+<p>Generate trading signals based on the current market state.</p>
+<p><code>get_signals(self) -&gt; Dict[str, int]</code></p>
+<p>Get the current signals for all symbols.</p>
+<h3 id="indicator">Indicator</h3>
+<p><code>init(self, data: np.ndarray) -&gt; Tuple[np.ndarray, int]</code></p>
+<p>Initialize the indicator with historical data.</p>
+<p><code>step(self, current_value: np.ndarray, new_data: np.ndarray, previous_result: np.ndarray) -&gt; np.ndarray</code></p>
+<p>Update the indicator with new data.</p>
+<h3 id="position_1">Position</h3>
+<p><code>buy(self, quantity: int, price: float, date: datetime.datetime)</code></p>
+<p>Buy more of the asset, increasing the quantity of the position.</p>
+<p><code>sell(self, quantity: int, price: float, date: datetime.datetime) -&gt; float</code></p>
+<p>Sell some of the asset, decreasing the quantity of the position.</p>
+<p><code>calculate_value(self, current_price: float) -&gt; float</code></p>
+<p>Calculate the current value of the position.</p>
+<p><code>calculate_pnl(self, current_price: float) -&gt; float</code></p>
+<p>Calculate the unrealized profit and loss (PnL) of the position.</p>
+<h3 id="order_1">Order</h3>
+<p><code>execute(self, daily_data: np.ndarray, feature_to_index: dict, order_date: datetime.datetime) -&gt; Tuple[float, int, float, int]</code></p>
+<p>Execute the order.</p></div>
+            </div>
+        </div>
+
+        <footer class="col-md-12">
+            <hr>
+            <p>Documentation built with <a href="https://www.mkdocs.org/">MkDocs</a>.</p>
+        </footer>
+        <script src="js/bootstrap.bundle.min.js"></script>
+        <script>
+            var base_url = ".",
+                shortcuts = {"help": 191, "next": 78, "previous": 80, "search": 83};
+        </script>
+        <script src="js/base.js"></script>
+        <script src="search/main.js"></script>
+
+        <div class="modal" id="mkdocs_search_modal" tabindex="-1" role="dialog" aria-labelledby="searchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="searchModalLabel">Search</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>From here you can search these documents. Enter your search terms below.</p>
+                <form>
+                    <div class="form-group">
+                        <input type="search" class="form-control" placeholder="Search..." id="mkdocs-search-query" title="Type search term here">
+                    </div>
+                </form>
+                <div id="mkdocs-search-results" data-no-results-text="No results found"></div>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div><div class="modal" id="mkdocs_keyboard_modal" tabindex="-1" role="dialog" aria-labelledby="keyboardModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h4 class="modal-title" id="keyboardModalLabel">Keyboard Shortcuts</h4>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <table class="table">
+                <thead>
+                  <tr>
+                    <th style="width: 20%;">Keys</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="help shortcut"><kbd>?</kbd></td>
+                    <td>Open this help</td>
+                  </tr>
+                  <tr>
+                    <td class="next shortcut"><kbd>n</kbd></td>
+                    <td>Next page</td>
+                  </tr>
+                  <tr>
+                    <td class="prev shortcut"><kbd>p</kbd></td>
+                    <td>Previous page</td>
+                  </tr>
+                  <tr>
+                    <td class="search shortcut"><kbd>s</kbd></td>
+                    <td>Search</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="modal-footer">
+            </div>
+        </div>
+    </div>
+</div>
+
+    </body>
+</html>
+
+<!--
+MkDocs version : 1.6.0
+Build Date UTC : 2024-08-02 17:59:27.308705+00:00
+-->
