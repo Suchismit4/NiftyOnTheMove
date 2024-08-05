@@ -18,24 +18,60 @@ class MAcrossover(bt.Strategy):
         self.slowma = {data: bt.indicators.SMA(self.data.close, period=self.params.slow) for data in self.datas}
         self.crossovers = {data: bt.indicators.CrossOver(self.fastma[data], self.slowma[data]) for data in self.datas}
         self.size = 10  # Fixed size for trades
+        self.order = None
+        
+    def log(self, txt, dt=None):
+        ''' Logging function fot this strategy'''
+        dt = dt or self.data.datetime[0]
+        if isinstance(dt, float):
+            dt = bt.num2date(dt)
+        logging.info('%s, %s' % (dt.isoformat(), txt))
 
-    def log_trade(self, dt, symbol, action, price, size, cash, portfolio_value):
-        logging.info(f"{dt}, {symbol}, {action}, {price}, {size}, {cash}, {portfolio_value}")
+    def notify_order(self, order):
+        if order.status in [order.Submitted, order.Accepted]:
+            # Buy/Sell order submitted/accepted to/by broker - Nothing to do
+            self.log('ORDER ACCEPTED/SUBMITTED', dt=order.created.dt)
+            self.order = order
+            return
 
+        if order.status in [order.Expired]:
+            self.log('BUY EXPIRED')
+
+        elif order.status in [order.Completed]:
+            if order.isbuy():
+                self.log(
+                    'BUY EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
+                    (order.executed.price,
+                     order.executed.value,
+                     order.executed.comm))
+
+            else:  # Sell
+                self.log('SELL EXECUTED, Price: %.2f, Cost: %.2f, Comm %.2f' %
+                         (order.executed.price,
+                          order.executed.value,
+                          order.executed.comm))
+
+        # Sentinel to None: new orders allowed
+        self.order = None
+        
     def next(self):
         dt = self.datas[0].datetime.date(0)
+        
+        if self.order: 
+            self.log("Pending order... skipping date")
+            return 
         
         for data in self.datas:
             symbol = data._name
             price = data.close[0]
             
+            if str(dt) == "2015-06-25" and symbol == "NIFTY500DUP":
+                print(self.broker.getcash())
             if self.getposition(data).size <= 0:  # not in the market
                 if self.crossovers[data] > 0:  # if fast crosses above slow
                     self.buy(data=data, size=self.size)
-                    self.log_trade(dt, symbol, 'buy', price, self.size, self.broker.get_cash(), self.broker.get_value())
             elif self.crossovers[data] < 0:  # in the market & cross to the downside
                 self.close(data=data, size=self.size)
-                self.log_trade(dt, symbol, 'sell', price, self.size, self.broker.get_cash(), self.broker.get_value())
 
 # Create a custom data feed
 class NIFTY500Data(bt.feeds.GenericCSVData):
@@ -69,11 +105,12 @@ data2 = NIFTY500Data(
     dataname='NIFTY500.csv',
     fromdate=datetime.datetime(2010, 1, 1),
     todate=datetime.datetime(2020, 12, 31),
-    name='NIFTY500'
+    name='NIFTY500DUP'
 )
 
 # Add the Data Feed to Cerebro
 cerebro.adddata(data)
+cerebro.adddata(data2)
 
 # Set our desired cash start
 cerebro.broker.setcash(100000.0)

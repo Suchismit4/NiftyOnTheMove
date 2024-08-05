@@ -169,6 +169,8 @@ class Strato:
             signals (Dict[str, int]): Trading signals for each symbol.
             daily_data (np.ndarray): Market data for the current day.
         """
+        disposable_cash = self.cash
+        
         for symbol, signal in signals.items():
             symbol_idx = self.symbol_to_index[symbol]
             price = daily_data[symbol_idx, self.feature_to_index['Close']]
@@ -180,8 +182,12 @@ class Strato:
 
             position = self.positions[symbol]
 
-            if signal == Strategy.BUY and self.cash >= price * self.trade_size:
-                self._create_buy_order(symbol, date, price, position, symbol_idx)
+            if signal == Strategy.BUY:
+                if disposable_cash >= self.data[self.date_to_index[date] + 1, symbol_idx, self.feature_to_index['Open']] * self.trade_size:
+                    disposable_cash -= self.data[self.date_to_index[date] + 1, symbol_idx, self.feature_to_index['Open']] * self.trade_size
+                    self._create_buy_order(symbol, date, price, position, symbol_idx)
+                else:
+                    logging.error(f"Tried to enter on {date} in {symbol} with {position} units for price of {price}. Rejected because of insufficient liquid funds: {disposable_cash}")
             elif signal == Strategy.SELL and position.get_current_quantity() >= self.trade_size:
                 self._create_sell_order(symbol, date, price, position, symbol_idx)
 

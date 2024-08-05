@@ -118,6 +118,8 @@ if __name__ == "__main__":
     # Import benchmark
     import pandas as pd
     bchk = pd.read_csv('NIFTY500.csv')
+    bchk['ticker'] = 'NIFTY500'
+    bchk.to_csv('NIFTY500_fixed.csv')
 
     # Create Strato instance
     strato = Strato(data,
