@@ -115,6 +115,10 @@ if __name__ == "__main__":
     # Create strategy
     strategy = MovingAverageStrategy(short_window=10, long_window=30)
 
+    # Import benchmark
+    import pandas as pd
+    bchk = pd.read_csv('NIFTY500.csv')
+
     # Create Strato instance
     strato = Strato(data,
                     symbol_to_index,
@@ -122,7 +126,7 @@ if __name__ == "__main__":
                     date_to_index,
                     starting_cash=100000.0,
                     trade_size=10,
-                    strategy=strategy)
+                    strategy=strategy, benchmark=bchk)
 
     # Add indicators
     strato.add_indicator('MA_10', MovingAverage(10))

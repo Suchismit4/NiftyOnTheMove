@@ -1,0 +1,255 @@
+# Getting Started with Strato
+
+Welcome to the documentation for Strato, a comprehensive library for backtesting trading strategies. This document will guide you through the installation, setup, and usage of the Strato library.
+
+## Table of Contents
+
+1. [Introduction](#introduction)
+2. [Installation](#installation)
+3. [Quick Start](#quick-start)
+4. [Data Structures](#data-structures)
+5. [Execution Loop Logic](#execution-loop-logic)
+6. [Advanced Usage](#advanced-usage)
+7. [API Reference](#api-reference)
+
+## Introduction
+
+Strato is a powerful and flexible backtesting framework designed to help you develop, test, and evaluate trading strategies. It supports complex trading strategies, indicator calculations, and performance tracking.
+
+## Installation
+
+To install Strato, you need to clone the repository and install the required dependencies.
+
+```bash
+git clone https://github.com/yourusername/strato.git
+cd strato
+pip install -r requirements.txt
+```
+
+## Quick Start
+
+Here is a quick example to get you started with Strato. This example demonstrates how to set up a moving average strategy and run a backtest.
+
+### Example: `main.py`
+```python
+...imports
+
+class MovingAverage(Indicator):
+    def __init__(self, window: int):
+        self.window = window
+
+    def init(self, data: np.ndarray) -> np.ndarray:
+        if data.shape[0] < self.window:
+            return np.full((1,), np.nan)
+        data_slice_sum = data[:self.window].sum(axis=0)
+        moving_average = (data_slice_sum / self.window)
+        return (moving_average, self.window)
+
+    def step(self, current_value: np.ndarray, new_data: np.ndarray, previous_result: np.ndarray) -> np.ndarray:
+        return previous_result + (new_data - current_value) / self.window
+
+class MovingAverageStrategy(Strategy):
+    def __init__(self, short_window: int, long_window: int):
+        super().__init__()
+        self.short_window = short_window
+        self.long_window = long_window
+        self.crossover_state: Dict[str, Optional[str]] = {}
+        self.initialized: Dict[str, bool] = {}
+
+    def generate_signals(self, date_idx: int, indicator_calculator: IndicatorCalculator, positions: Dict[str, Position], symbol_to_index: Dict[str, int]):
+        if date_idx < self.long_window:
+            return  # Not enough data to generate signals
+
+        short_ma = indicator_calculator.get_indicator(f'MA_{self.short_window}')
+        long_ma = indicator_calculator.get_indicator(f'MA_{self.long_window}')
+        new_crossover_state = dict(self.crossover_state)
+        new_signals = {}
+
+        for symbol, symbol_idx in symbol_to_index.items():
+            short_mavg = short_ma[date_idx, symbol_idx]
+            long_mavg = long_ma[date_idx, symbol_idx]
+            if np.isnan(short_mavg) or np.isnan(long_mavg):
+                continue
+
+            if symbol not in self.initialized:
+                self.initialized[symbol] = False
+            current_state = new_crossover_state.get(symbol)
+
+            if not self.initialized[symbol]:  # Initialize crossover state without generating signals
+                if short_mavg > long_mavg:
+                    new_crossover_state[symbol] = 'bullish'
+                elif short_mavg < long_mavg:
+                    new_crossover_state[symbol] = 'bearish'
+                self.initialized[symbol] = True
+                new_signals[symbol] = self.HOLD  # No trading signal during initialization
+            else:  # Generate trading signals based on crossover
+                if short_mavg > long_mavg and current_state != 'bullish':
+                    new_signals[symbol] = self.BUY
+                    new_crossover_state[symbol] = 'bullish'
+                elif short_mavg < long_mavg and current_state != 'bearish':
+                    new_signals[symbol] = self.SELL
+                    new_crossover_state[symbol] = 'bearish'
+                else:
+                    new_signals[symbol] = self.HOLD
+
+        self.crossover_state = new_crossover_state
+        self.signals = new_signals
+
+def setup_logging():
+    ... your implementation goes here
+
+# Main execution
+if __name__ == "__main__":
+    # Initialize the argument parser
+    parser = argparse.ArgumentParser(description="Main script for backtesting")
+    parser.add_argument("csv", help="The backtest data file paths", type=str, nargs='+')
+    parser.add_argument("--verbose", help="Dump detailed log", action='store_true')
+    args = parser.parse_args()
+
+    # Access the list of CSV paths
+    csv_paths = args.csv
+
+    # Print out the list of CSV paths (for debugging purposes)
+    if args.verbose:
+        print(f"CSV paths provided: {csv_paths}")
+
+    data, symbol_to_index, feature_to_index, date_to_index, start_date, end_date, features = load_and_transform_csv(csv_paths)
+
+    # Call the setup_logging function at the start of your main script
+    if args.verbose:
+        setup_logging()
+
+    # Create strategy
+    strategy = MovingAverageStrategy(short_window=10, long_window=30)
+
+    # Create Strato instance
+    strato = Strato(data, symbol_to_index, feature_to_index, date_to_index, starting_cash=100000.0, trade_size=10, strategy=strategy)
+
+    # Add indicators
+    strato.add_indicator('MA_10', MovingAverage(10))
+    strato.add_indicator('MA_30', MovingAverage(30))
+
+    # Run backtest
+    results = strato.run_backtest()
+    print(f'Starting Portfolio Value: ₹{100000.00}')
+    print(f'Final Portfolio Value: ₹{results[-1]:.2f}')
+```
+
+## Data Structures
+
+### Tensors
+In Strato, the primary data structure used is a tensor with the shape `T x N x J`, where:
+
+`T` is the number of time steps (dates).
+`N` is the number of symbols (assets).
+`J` is the number of features (e.g., Open, High, Low, Close, Volume, Returns).
+
+This tensor structure allows efficient and flexible access to historical market data.
+
+## Strategy
+A trading strategy in Strato is defined by extending the Strategy abstract base class. Strategies generate buy, sell, or hold signals based on the state of the market and the calculated indicators.
+
+## Indicators
+Indicators are calculated using the Indicator abstract base class. Each indicator must implement the init and step methods to initialize and update the indicator values, respectively.
+
+## Position
+A Position represents the quantity and price of a particular asset held in the portfolio. It supports buying and selling operations and calculates the current value and profit/loss of the position.
+
+## Order
+An Order represents a buy or sell order for a specific asset. It includes details such as the order type, quantity, and execution logic.
+
+## Execution Loop Logic
+
+The main execution loop in Strato involves the following steps:
+
+1. Initialize Indicators: Calculate initial indicator values.
+2. Generate Signals: Based on the current market state and indicator values, generate trading signals.
+3. Execute Orders: Execute pending orders from the previous day.
+4. Calculate Portfolio Value: Compute the total value of the portfolio, including cash and positions.
+5. Process New Signals: Create new orders based on the generated signals.
+
+This loop continues for each time step in the historical data, simulating the execution of trades over time.
+
+## Advanced Usage
+
+### Adding Custom Indicators
+To add a custom indicator, create a new class that inherits from Indicator and implement the required methods.
+
+```python
+class CustomIndicator(Indicator):
+    def init(self, data: np.ndarray) -> Tuple[np.ndarray, int]:
+        # Initialization logic
+        pass
+
+    def step(self, current_value: np.ndarray, new_data: np.ndarray, previous_result: np.ndarray) -> np.ndarray:
+        # Update logic
+        pass
+```
+
+### Using Multiple Strategies
+You can also run backtests with multiple strategies by creating instances of different strategy classes and running them sequentially or in parallel.
+
+
+## API Reference
+
+### Strato
+`__init__(self, data: np.ndarray, symbol_to_index: Dict[str, int], feature_to_index: Dict[str, int], date_to_index: Dict[datetime.datetime, int], starting_cash: float, trade_size: int, strategy: Strategy)`
+
+Initialize the Strato backtesting environment.
+
+`add_indicator(self, name: str, indicator: Indicator, column: str = 'Close')`
+
+Add a new indicator to the backtesting environment.
+
+`run_backtest(self) -> List[float]`
+
+Run the backtest simulation.
+
+`generate_backtest_report(self, portfolio_values: np.ndarray, dates: List[datetime.datetime], daily_pnl: List[float], daily_cash: List[float], trade_history: List[Dict]) -> str`
+
+Generate a comprehensive backtest report.
+
+
+### Strategy
+`generate_signals(self, date_idx: int, indicator_calculator: IndicatorCalculator, positions: Dict[str, Position], symbol_to_index: Dict[str, int])`
+
+Generate trading signals based on the current market state.
+
+`get_signals(self) -> Dict[str, int]`
+
+Get the current signals for all symbols.
+
+
+### Indicator
+`init(self, data: np.ndarray) -> Tuple[np.ndarray, int]`
+
+Initialize the indicator with historical data.
+
+`step(self, current_value: np.ndarray, new_data: np.ndarray, previous_result: np.ndarray) -> np.ndarray`
+
+Update the indicator with new data.
+
+
+### Position
+`buy(self, quantity: int, price: float, date: datetime.datetime)`
+
+Buy more of the asset, increasing the quantity of the position.
+
+`sell(self, quantity: int, price: float, date: datetime.datetime) -> float`
+
+Sell some of the asset, decreasing the quantity of the position.
+
+`calculate_value(self, current_price: float) -> float`
+
+Calculate the current value of the position.
+
+`calculate_pnl(self, current_price: float) -> float`
+
+Calculate the unrealized profit and loss (PnL) of the position.
+
+
+### Order
+
+`execute(self, daily_data: np.ndarray, feature_to_index: dict, order_date: datetime.datetime) -> Tuple[float, int, float, int]`
+
+Execute the order.
