@@ -18,6 +18,10 @@ class Strategy(ABC):
         Initialize the Strategy object.
         """
         self.signals = {}
+        self.name = "A Strategy"
+        
+    def __getname__(self):
+        return self.name
 
     def buy(self, symbol: str):
         """

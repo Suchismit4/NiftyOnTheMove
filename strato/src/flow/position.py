@@ -21,6 +21,7 @@ class Position:
             date_entered (datetime.datetime): The date and time when the position was entered.
         """
         self.asset = asset
+        self.bars_since_entry = 0
         self.entries = [{'quantity': initial_quantity, 'price': initial_price, 'date': date_entered}]
         self.current_quantity = initial_quantity
         logging.debug(f"Position initialized with entries: {self.entries} and current quantity: {self.current_quantity}")

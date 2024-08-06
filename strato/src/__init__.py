@@ -32,7 +32,7 @@ class Strato:
     
     def __init__(self, data: np.ndarray, symbol_to_index: Dict[str, int], 
                  feature_to_index: Dict[str, int], date_to_index: Dict[datetime.datetime, int], 
-                 starting_cash: float, trade_size: int, strategy: Strategy, benchmark: pd.DataFrame = None):
+                 starting_cash: float, trade_size: int, strategy: Strategy, benchmark: pd.DataFrame = None, generate_report: bool = False):
         """
         Initialize the Strato backtesting environment.
 
@@ -67,7 +67,9 @@ class Strato:
         logging.debug(f"Initialized with data shape: {data.shape}, starting cash: {starting_cash}, trade size: {trade_size}")
         logging.debug(f"Symbols: {list(symbol_to_index.keys())}, Features: {list(feature_to_index.keys())}")
         self.benchmark = benchmark
-            
+        
+        self.generate_report = generate_report
+                    
 
     def add_indicator(self, name: str, indicator: Indicator, column: str = 'Close'):
         """
@@ -132,10 +134,21 @@ class Strato:
 
             # Process new signals and create orders
             self._process_signals(date, signals, daily_data)
+            
+            self._update_positions()
 
         logging.debug("Backtest completed")
-        self.generate_backtest_report(np.array(portfolio_values), dates[min_start:], [], daily_cash, self.trade_history)
+        if self.generate_report:
+            self.generate_backtest_report(np.array(portfolio_values), dates[min_start:], [], daily_cash, self.trade_history)
         return portfolio_values
+    
+    def _update_positions(self):
+
+        for sym in self.positions:
+            pos = self.positions[sym]
+            
+            if len(pos.get_positions()) >= 0:
+                pos.bars_since_entry += 1
 
     def _execute_pending_orders(self, date, daily_data):
         """
@@ -473,7 +486,7 @@ class Strato:
             \usepackage{subfig}
             \geometry{a4paper, margin=0.8in}
             \begin{document}
-            \title{Backtest Report}
+            \title{%s}
             \author{}
             \date{}
             \maketitle
@@ -538,7 +551,7 @@ class Strato:
             \end{figure}
 
             \end{document}
-            """ % (sharpe_ratio, max_drawdown, normalized_annual_return, cumulative_returns_path, portfolio_value_path,
+            """ % (self.strategy.__getname__(), sharpe_ratio, max_drawdown, normalized_annual_return, cumulative_returns_path, portfolio_value_path,
                 rolling_sharpe_path, rolling_volatility_path, returns_quantile_3m_path, returns_quantile_6m_path, returns_quantile_12m_path,
                 monthly_returns_heatmap_path, returns_distribution_path, yearly_returns_path, weekly_returns_path, drawdowns_path)
 

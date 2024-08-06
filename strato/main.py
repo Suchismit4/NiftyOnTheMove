@@ -1,82 +1,13 @@
+import pandas as pd
 import datetime
-import logging
-import numpy as np
-from typing import Dict, Optional
 import argparse
+import logging
 
 from src import Strato
-from src.struct.strategy import Strategy
-from src.struct.indicator import Indicator, IndicatorCalculator
-from src.flow.position import Position
 from src.utils import load_and_transform_csv
 
-class MovingAverage(Indicator):
-    def __init__(self, window: int):
-        self.window = window
-
-    def init(self, data: np.ndarray) -> np.ndarray:
-        if data.shape[0] < self.window:
-            return np.full((1,), np.nan)
-        
-        data_slice_sum = data[:self.window].sum(axis=0)
-        moving_average = (data_slice_sum / self.window)
-        return (moving_average, self.window)
-
-    def step(self, current_value: np.ndarray, new_data: np.ndarray, previous_result: np.ndarray) -> np.ndarray:
-        return previous_result + (new_data - current_value) / self.window
-
-class MovingAverageStrategy(Strategy):
-   
-    def __init__(self, short_window: int, long_window: int):
-        super().__init__()
-        self.short_window = short_window
-        self.long_window = long_window
-        self.crossover_state: Dict[str, Optional[str]] = {}
-        self.initialized: Dict[str, bool] = {}
-
-    def generate_signals(self, date_idx: int, indicator_calculator: IndicatorCalculator,
-                         positions: Dict[str, Position], symbol_to_index: Dict[str, int]):
-        if date_idx < self.long_window:
-            return  # Not enough data to generate signals
-
-        short_ma = indicator_calculator.get_indicator(f'MA_{self.short_window}')
-        long_ma = indicator_calculator.get_indicator(f'MA_{self.long_window}')
-        new_crossover_state = dict(self.crossover_state)
-        new_signals = {}
-
-        for symbol, symbol_idx in symbol_to_index.items():
-            short_mavg = short_ma[date_idx, symbol_idx]
-            long_mavg = long_ma[date_idx, symbol_idx]
-
-            if np.isnan(short_mavg) or np.isnan(long_mavg):
-                continue
-
-            if symbol not in self.initialized:
-                self.initialized[symbol] = False
-
-            current_state = new_crossover_state.get(symbol)
-
-            if not self.initialized[symbol]:
-                # Initialize crossover state without generating signals
-                if short_mavg > long_mavg:
-                    new_crossover_state[symbol] = 'bullish'
-                elif short_mavg < long_mavg:
-                    new_crossover_state[symbol] = 'bearish'
-                self.initialized[symbol] = True
-                new_signals[symbol] = self.HOLD  # No trading signal during initialization
-            else:
-                # Generate trading signals based on crossover
-                if short_mavg > long_mavg and current_state != 'bullish':
-                    new_signals[symbol] = self.BUY
-                    new_crossover_state[symbol] = 'bullish'
-                elif short_mavg < long_mavg and current_state != 'bearish':
-                    new_signals[symbol] = self.SELL
-                    new_crossover_state[symbol] = 'bearish'
-                else:
-                    new_signals[symbol] = self.HOLD
-
-        self.crossover_state = new_crossover_state
-        self.signals = new_signals
+# from src.examples.moving_average_cross import *
+from src.examples.out_of_whack import *
 
 def setup_logging():
     import os
@@ -108,35 +39,62 @@ if __name__ == "__main__":
     if args.verbose:
         print(f"CSV paths provided: {csv_paths}")
         
+    # Import benchmark
+    bchk = pd.read_csv('NIFTY500.csv')
+    bchk['ticker'] = 'NIFTY500'
+    bchk.to_csv('NIFTY500_fixed.csv')        
+
     data, symbol_to_index, feature_to_index, date_to_index, start_date, end_date, features = load_and_transform_csv(csv_paths)
     # Call the setup_logging function at the start of your main script
     if args.verbose: 
         setup_logging()
+        
+        
     # Create strategy
-    strategy = MovingAverageStrategy(short_window=10, long_window=30)
+    strategy = OutOfWhackMarketAnomoly(rsi_short_window=2, 
+                                       rsi_long_window=25,
+                                       threshold=15)
 
-    # Import benchmark
-    import pandas as pd
-    bchk = pd.read_csv('NIFTY500.csv')
-    bchk['ticker'] = 'NIFTY500'
-    bchk.to_csv('NIFTY500_fixed.csv')
-
-    # Create Strato instance
+    # Create a Strato instance for a strategy
     strato = Strato(data,
                     symbol_to_index,
                     feature_to_index,
                     date_to_index,
                     starting_cash=100000.0,
-                    trade_size=10,
-                    strategy=strategy, benchmark=bchk)
+                    trade_size=5,
+                    strategy=strategy, benchmark=bchk, generate_report=True)
 
     # Add indicators
-    strato.add_indicator('MA_10', MovingAverage(10))
-    strato.add_indicator('MA_30', MovingAverage(30))
+    strato.add_indicator('RSI_2', RSI(2, inverse_logistic=True))
+    strato.add_indicator('RSI_25', RSI(25))
 
     # Run backtest
     results = strato.run_backtest()
 
     print(f'Starting Portfolio Value: ₹{100000.00}')
     print(f'Final Portfolio Value: ₹{results[-1]:.2f}')
+    
+        
+    # # Create strategy
+    # strategy = MovingAverageStrategy(short_window=10, long_window=30)
+
+    # # Create a Strato instance for a strategy
+    # strato = Strato(data,
+    #                 symbol_to_index,
+    #                 feature_to_index,
+    #                 date_to_index,
+    #                 starting_cash=100000.0,
+    #                 trade_size=10,
+    #                 strategy=strategy, benchmark=bchk)
+
+    # # Add indicators
+    # strato.add_indicator('MA_10', MovingAverage(10))
+    # strato.add_indicator('MA_30', MovingAverage(30))
+
+    # # Run backtest
+    # results = strato.run_backtest()
+
+    # print(f'Starting Portfolio Value: ₹{100000.00}')
+    # print(f'Final Portfolio Value: ₹{results[-1]:.2f}')
+    
     
