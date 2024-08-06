@@ -796,14 +796,37 @@ class Strato:
         """
         peak = np.maximum.accumulate(portfolio_values)
         drawdown = (portfolio_values - peak) / peak
-        drawdown_series = pd.Series(drawdown)
-        major_drawdowns = drawdown_series.nsmallest(3).index
+        drawdown_series = pd.Series(drawdown, index=dates[:-1])
         
+        # Identify drawdown periods
+        in_drawdown = False
+        drawdown_periods = []
+        start_date = None
+
+        for date, dd in drawdown_series.items():
+            if dd < 0:
+                if not in_drawdown:
+                    in_drawdown = True
+                    start_date = date
+            else:
+                if in_drawdown:
+                    in_drawdown = False
+                    end_date = date
+                    drawdown_periods.append((start_date, end_date))
+        
+        # If the last period is still in drawdown, close it
+        if in_drawdown:
+            drawdown_periods.append((start_date, dates[-2]))
+
         plt.figure(figsize=(12, 8), dpi=300)
         plt.plot(dates[:-1], portfolio_values, label='Portfolio Value', color='blue')
         
-        for drawdown in major_drawdowns:
-            plt.axvline(dates[drawdown], color='red', linestyle='--', label='Major Drawdown' if drawdown == major_drawdowns[0] else "")
+        # Highlight drawdown regions
+        for start_date, end_date in drawdown_periods:
+            start_idx = dates.index(start_date)
+            end_idx = dates.index(end_date) + 1  # Include the end date in the shading
+            plt.fill_between(dates[start_idx:end_idx], portfolio_values[start_idx:end_idx], peak[start_idx:end_idx], 
+                            color='red', alpha=0.3)
         
         plt.xlabel('Date', fontsize=18)
         plt.ylabel('Portfolio Value', fontsize=18)
@@ -813,14 +836,16 @@ class Strato:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close()
 
-    def _plot_weekly_returns(self, dates, returns, save_path):
+
+    def _plot_weekly_returns(self, dates, returns, save_path, window=24):
         """
-        Plot a horizontal bar graph of weekly returns.
+        Plot a horizontal bar graph of composite rolling average weekly returns.
 
         Args:
             dates (List[datetime.datetime]): Corresponding dates.
             returns (np.array): Array of daily returns.
             save_path (str): Path to save the plot.
+            window (int): Rolling window for averaging weekly returns. Defaults to 4 weeks.
         """
         df = pd.DataFrame({'date': dates[1:], 'returns': returns})
         df.set_index('date', inplace=True)
@@ -828,21 +853,24 @@ class Strato:
         # Resample the returns to weekly frequency and compute the product of returns for each week
         weekly_returns = df['returns'].resample('W').apply(lambda x: (1 + x).prod() - 1)
         
+        # Compute rolling average weekly returns
+        rolling_avg_weekly_returns = weekly_returns.rolling(window=window).mean()
+        
         plt.figure(figsize=(14, 10), dpi=300)
-        bars = plt.bar(weekly_returns.index, weekly_returns * 100, width=5)
-        plt.axhline(y=0, color='black', linestyle='-', linewidth=0.8)
-        plt.title('Weekly Returns', fontsize=20)
-        plt.xlabel('Week', fontsize=16)
-        plt.ylabel('Returns (%)', fontsize=16)
-        plt.grid(True, axis='y', linestyle='--', alpha=0.7)
+        bars = plt.barh(rolling_avg_weekly_returns.index, rolling_avg_weekly_returns * 100, height=5)
+        plt.axvline(x=0, color='black', linestyle='-', linewidth=0.8)
+        plt.title(f'Composite Rolling Average Weekly Returns ({window}-week window)', fontsize=24)
+        plt.xlabel('Returns (%)', fontsize=18)
+        plt.ylabel('Week', fontsize=18)
+        plt.grid(True, axis='x', linestyle='--', alpha=0.7)
 
         for bar in bars:
-            height = bar.get_height()
-            plt.text(bar.get_x() + bar.get_width()/2, height, 
-                    f'{height:.2f}%', ha='center', va='bottom' if height >= 0 else 'top', fontsize=12)
+            width = bar.get_width()
+            plt.text(width, bar.get_y() + bar.get_height()/2, 
+                    f'{width:.2f}%', ha='left' if width >= 0 else 'right', va='center', fontsize=12)
 
         for bar in bars:
-            if bar.get_height() < 0:
+            if bar.get_width() < 0:
                 bar.set_color('red')
             else:
                 bar.set_color('green')

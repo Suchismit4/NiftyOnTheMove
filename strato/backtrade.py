@@ -14,8 +14,8 @@ class MAcrossover(bt.Strategy):
     )
 
     def __init__(self):
-        self.fastma = {data: bt.indicators.SMA(self.data.close, period=self.params.fast) for data in self.datas}
-        self.slowma = {data: bt.indicators.SMA(self.data.close, period=self.params.slow) for data in self.datas}
+        self.fastma =     {data: bt.indicators.SMA(self.data.close, period=self.params.fast) for data in self.datas}
+        self.slowma =     {data: bt.indicators.SMA(self.data.close, period=self.params.slow) for data in self.datas}
         self.crossovers = {data: bt.indicators.CrossOver(self.fastma[data], self.slowma[data]) for data in self.datas}
         self.size = 10  # Fixed size for trades
         self.order = None
