@@ -12,6 +12,7 @@ import shutil
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+plt.style.use('dark_background')
 import seaborn as sns
 import matplotlib.dates as mdates
 
@@ -414,6 +415,12 @@ class Strato:
 
             rolling_volatility_path = os.path.join(temp_dir, 'rolling_volatility.png')
             self._plot_rolling_volatility(dates[1:], returns,rolling_volatility_path, 126)
+            
+            weekly_returns_path = os.path.join(temp_dir, 'weekly_returns.png')
+            self._plot_weekly_returns(dates[1:], returns, weekly_returns_path)
+            
+            drawdowns_path = os.path.join(temp_dir, 'drawdowns.png')
+            self._plot_drawdowns(dates, portfolio_values, drawdowns_path)
 
             # Generate LaTeX document
             latex_file_path = os.path.join(temp_dir, 'backtest_report.tex')
@@ -431,7 +438,9 @@ class Strato:
                 rolling_volatility_path,
                 sharpe_ratio,
                 max_drawdown,
-                normalized_annual_return
+                normalized_annual_return,
+                weekly_returns_path,
+                drawdowns_path
             )
 
             # Compile LaTeX to PDF
@@ -450,82 +459,92 @@ class Strato:
             shutil.rmtree(temp_dir)
 
     def _generate_latex_document(self, filepath, portfolio_value_path, cumulative_returns_path,
-                            returns_quantile_3m_path, returns_quantile_6m_path, returns_quantile_12m_path,
-                            returns_distribution_path, monthly_returns_heatmap_path,
-                            yearly_returns_path, rolling_sharpe_path, rolling_volatility_path,
-                            sharpe_ratio, max_drawdown, normalized_annual_return):
-        latex_content = r"""
-        \documentclass{article}
-        \usepackage{graphicx}
-        \usepackage{geometry}
-        \usepackage{subfig}
-        \geometry{a4paper, margin=1in}
-        \begin{document}
-        \title{Backtest Report}
-        \author{}
-        \date{}
-        \maketitle
+                                returns_quantile_3m_path, returns_quantile_6m_path, returns_quantile_12m_path,
+                                returns_distribution_path, monthly_returns_heatmap_path,
+                                yearly_returns_path, rolling_sharpe_path, rolling_volatility_path,
+                                sharpe_ratio, max_drawdown, normalized_annual_return, weekly_returns_path, drawdowns_path):
+            latex_content = r"""
+            \documentclass{article}
+            \usepackage{graphicx}
+            \usepackage{xcolor}
+            \pagecolor[rgb]{0,0,0} 
+            \color[rgb]{0.96078431372, 0.96470588235, 0.98039215686} 
+            \usepackage{geometry}
+            \usepackage{subfig}
+            \geometry{a4paper, margin=0.8in}
+            \begin{document}
+            \title{Backtest Report}
+            \author{}
+            \date{}
+            \maketitle
 
-        \section*{Summary Statistics}
-        \begin{itemize}
-        \item Sharpe Ratio: %.2f
-        \item Maximum Drawdown: %.2f %%
-        \item Normalized Annual Return: %.2f %%
-        \end{itemize}
+            \section*{Summary Statistics}
+            \begin{itemize}
+            \item Sharpe Ratio: %.2f
+            \item Maximum Drawdown: %.2f %%
+            \item Normalized Annual Return: %.2f %%
+            \end{itemize}
 
-        \section*{Performance Plots}
-        \begin{figure}[h!]
-        \centering
-        \subfloat[Cumulative Returns]{\includegraphics[width=0.48\textwidth]{%s}}
-        \hfill
-        \subfloat[Portfolio Value]{\includegraphics[width=0.48\textwidth]{%s}}
-        \caption{Cumulative Returns and Portfolio Value Over Time}
-        \end{figure}
+            \section*{Performance}
+            \begin{figure}[h!]
+            \centering
+            \subfloat[Cumulative Returns]{\includegraphics[width=0.48\textwidth]{%s}}
+            \hfill
+            \subfloat[Portfolio Value]{\includegraphics[width=0.48\textwidth]{%s}}
+            \caption{Cumulative Returns and Portfolio Value Over Time}
+            \end{figure}
 
-        \section*{Return Quantiles}
-        \begin{figure}[h!]
-        \centering
-        \subfloat[3-Month]{\includegraphics[width=0.32\textwidth]{%s}}
-        \hfill
-        \subfloat[6-Month]{\includegraphics[width=0.32\textwidth]{%s}}
-        \hfill
-        \subfloat[12-Month]{\includegraphics[width=0.32\textwidth]{%s}}
-        \caption{Return Quantiles Over Different Time Spreads}
-        \end{figure}
+            \section*{}
+            \begin{figure}[h!]
+            \centering
+            \subfloat[Rolling Sharpe Ratio]{\includegraphics[width=0.48\textwidth]{%s}}
+            \hfill
+            \subfloat[Rolling Volatility]{\includegraphics[width=0.48\textwidth]{%s}}
+            \caption{Rolling Sharpe Ratio and Volatility (6 months)}
+            \end{figure}
 
-        \section*{Return Analysis}
-        \begin{figure}[h!]
-        \centering
-        \subfloat[Monthly Returns Heatmap]{\includegraphics[width=0.48\textwidth]{%s}}
-        \hfill
-        \subfloat[Returns Distribution]{\includegraphics[width=0.48\textwidth]{%s}}
-        \caption{Monthly Returns Heatmap and Returns Distribution}
-        \end{figure}
+            \section*{Return Quantiles}
+            \begin{figure}[h!]
+            \centering
+            \subfloat[3-Month]{\includegraphics[width=0.32\textwidth]{%s}}
+            \hfill
+            \subfloat[6-Month]{\includegraphics[width=0.32\textwidth]{%s}}
+            \hfill
+            \subfloat[12-Month]{\includegraphics[width=0.32\textwidth]{%s}}
+            \caption{Return Quantiles Over Different Time Spreads}
+            \end{figure}
 
-        \section*{Yearly Returns}
-        \begin{figure}[h!]
-        \centering
-        \includegraphics[width=0.95\textwidth]{%s}
-        \caption{Yearly Returns}
-        \end{figure}
+            \section*{Return Analysis}
+            \begin{figure}[h!]
+            \centering
+            \subfloat[Monthly Returns Heatmap]{\includegraphics[width=0.48\textwidth]{%s}}
+            \hfill
+            \subfloat[Returns Distribution]{\includegraphics[width=0.48\textwidth]{%s}}
+            \caption{Monthly Returns Heatmap and Returns Distribution}
+            \end{figure}
 
-        \section*{Rolling Metrics}
-        \begin{figure}[h!]
-        \centering
-        \subfloat[Rolling Sharpe Ratio]{\includegraphics[width=0.48\textwidth]{%s}}
-        \hfill
-        \subfloat[Rolling Volatility]{\includegraphics[width=0.48\textwidth]{%s}}
-        \caption{Rolling Sharpe Ratio and Volatility (6 months)}
-        \end{figure}
+            \begin{figure}[h!]
+            \centering
+            \subfloat[Yearly Returns]{\includegraphics[width=0.48\textwidth]{%s}}
+            \hfill
+            \subfloat[Weekly Returns]{\includegraphics[width=0.48\textwidth]{%s}}
+            \caption{Yearly and Weekly Returns}
+            \end{figure}
 
-        \end{document}
-        """ % (sharpe_ratio, max_drawdown, normalized_annual_return, cumulative_returns_path, portfolio_value_path,
-            returns_quantile_3m_path, returns_quantile_6m_path, returns_quantile_12m_path,
-            monthly_returns_heatmap_path, returns_distribution_path, yearly_returns_path,
-            rolling_sharpe_path, rolling_volatility_path)
+            \begin{figure}[h!]
+            \centering
+            \includegraphics[width=0.95\textwidth]{%s}
+            \caption{Drawdowns in Portfolio Value Over Time}
+            \end{figure}
 
-        with open(filepath, 'w') as f:
-            f.write(latex_content)
+            \end{document}
+            """ % (sharpe_ratio, max_drawdown, normalized_annual_return, cumulative_returns_path, portfolio_value_path,
+                rolling_sharpe_path, rolling_volatility_path, returns_quantile_3m_path, returns_quantile_6m_path, returns_quantile_12m_path,
+                monthly_returns_heatmap_path, returns_distribution_path, yearly_returns_path, weekly_returns_path, drawdowns_path)
+
+
+            with open(filepath, 'w') as f:
+                f.write(latex_content)
 
     def _plot_portfolio_value(self, dates, portfolio_values, save_path):
         """
@@ -536,11 +555,11 @@ class Strato:
             portfolio_values (np.array): Array of portfolio values.
             save_path (str): Path to save the plot.
         """
-        plt.figure(figsize=(10, 6), dpi=300)
+        plt.figure(figsize=(12, 8), dpi=300)
         plt.plot(dates[:-1], portfolio_values, color='#1f77b4')
-        plt.xlabel('Date')
-        plt.ylabel('Portfolio Value (₹)')
-        plt.title('Portfolio Value Over Time')
+        plt.xlabel('Date', fontsize=18)
+        plt.ylabel('Portfolio Value (₹)', fontsize=18)
+        plt.title('Portfolio Value Over Time', fontsize=21)
         plt.tight_layout()
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close()
@@ -554,7 +573,7 @@ class Strato:
         cumulative_returns (np.array): Cumulative returns.
         save_path (str): Path to save the plot.
         """
-        plt.figure(figsize=(10, 6), dpi=300)
+        plt.figure(figsize=(12, 8), dpi=300)
         
         # Convert dates to matplotlib date format
         strategy_dates = mdates.date2num(dates[:-1])
@@ -567,16 +586,16 @@ class Strato:
         benchmark_returns =  np.log(self.benchmark['Close']).diff().shift(-1)
         plt.plot_date(benchmark_dates, benchmark_returns.cumsum(), '-', color='#3ca12f', label="Benchmark")
         
-        plt.xlabel('Date')
-        plt.ylabel('Cumulative Returns')
-        plt.title('Cumulative Returns Over Time')
+        plt.xlabel('Date', fontsize=18)
+        plt.ylabel('Cumulative Returns', fontsize=18)
+        plt.title('Cumulative Returns Over Time', fontsize=21)
         
         # Format x-axis
         plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
         plt.gca().xaxis.set_major_locator(mdates.YearLocator())
         plt.gcf().autofmt_xdate()  # Rotate and align the tick labels
         
-        plt.legend()
+        plt.legend(fontsize=12)
         plt.grid(True, linestyle='--', alpha=0.7)
         plt.tight_layout()
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -591,23 +610,24 @@ class Strato:
             log_returns (np.array): Logarithmic returns.
             save_path (str): Path to save the plot.
         """
-        plt.figure(figsize=(14, 7), dpi=300)
+        plt.figure(figsize=(14, 10), dpi=300)
         plt.plot(dates[:-1], log_returns, label='Logarithmic Returns')
-        plt.xlabel('Date')
-        plt.ylabel('Logarithmic Returns')
-        plt.title('Logarithmic Returns Over Time')
-        plt.legend()
+        plt.xlabel('Date', fontsize=18)
+        plt.ylabel('Logarithmic Returns', fontsize=18)
+        plt.title('Logarithmic Returns Over Time', fontsize=21)
+        plt.legend(fontsize=12)
         plt.grid(True)
-        plt.savefig(save_path)
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close()
 
     def _plot_returns_quantile(self, dates, returns, months, save_path):
         period_returns = [np.prod(1 + returns[i:i+months*21]) - 1 for i in range(len(returns) - months*21)]
         
-        plt.figure(figsize=(10, 8), dpi=300)
+        plt.figure(figsize=(12, 10), dpi=300)
         sns.boxplot(y=period_returns, color='lightblue', whis=[5, 95])
-        plt.title(f'{months}-Month Returns Quantile')
-        plt.ylabel('Returns')
+        plt.title(f'{months}-Month Returns Quantile', fontsize=21)
+        plt.ylabel('Returns', fontsize=18)
         
         # Adjust y-axis limits to show outliers better
         y_min, y_max = plt.ylim()
@@ -618,11 +638,11 @@ class Strato:
         plt.close()
 
     def _plot_returns_distribution(self, returns, save_path):
-        plt.figure(figsize=(12, 8), dpi=300)
+        plt.figure(figsize=(14, 10), dpi=300)
         sns.histplot(returns, bins=50, kde=True, color='skyblue', edgecolor='black')
-        plt.xlabel('Returns')
-        plt.ylabel('Frequency')
-        plt.title('Returns Distribution')
+        plt.xlabel('Returns', fontsize=18)
+        plt.ylabel('Frequency', fontsize=18)
+        plt.title('Returns Distribution', fontsize=21)
         
         mean_return = np.mean(returns)
         median_return = np.median(returns)
@@ -634,7 +654,7 @@ class Strato:
         x_min, x_max = plt.xlim()
         plt.xlim(x_min - 0.1 * (x_max - x_min), x_max + 0.1 * (x_max - x_min))
         
-        plt.legend()
+        plt.legend(fontsize=12)
         plt.tight_layout()
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close()
@@ -643,11 +663,11 @@ class Strato:
         df = pd.DataFrame({'date': dates[1:], 'returns': returns})
         df['rolling_vol'] = df['returns'].rolling(window).std() * np.sqrt(252)
         
-        plt.figure(figsize=(12, 6), dpi=300)
+        plt.figure(figsize=(14, 10), dpi=300)
         plt.plot(df['date'], df['rolling_vol'])
-        plt.title(f'Rolling Volatility ({window} trading days)')
-        plt.xlabel('Date')
-        plt.ylabel('Annualized Volatility')
+        plt.title(f'Rolling Volatility ({window} trading days)', fontsize=21)
+        plt.xlabel('Date', fontsize=18)
+        plt.ylabel('Annualized Volatility', fontsize=18)
         plt.grid(True, linestyle='--', alpha=0.7)
         plt.tight_layout()
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -657,11 +677,11 @@ class Strato:
         df = pd.DataFrame({'date': dates[1:], 'returns': returns})
         df['rolling_sharpe'] = (df['returns'].rolling(window).mean() * np.sqrt(252)) / (df['returns'].rolling(window).std() * np.sqrt(252))
         
-        plt.figure(figsize=(12, 6), dpi=300)
+        plt.figure(figsize=(14, 10), dpi=300)
         plt.plot(df['date'], df['rolling_sharpe'])
-        plt.title(f'Rolling Sharpe Ratio ({window} trading days)')
-        plt.xlabel('Date')
-        plt.ylabel('Sharpe Ratio')
+        plt.title(f'Rolling Sharpe Ratio ({window} trading days)', fontsize=21)
+        plt.xlabel('Date', fontsize=18)
+        plt.ylabel('Sharpe Ratio', fontsize=18)
         plt.grid(True, linestyle='--', alpha=0.7)
         plt.tight_layout()
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -674,12 +694,12 @@ class Strato:
 
         monthly_returns = df.groupby(['year', 'month'])['returns'].apply(lambda x: (x + 1).prod() - 1).unstack()
 
-        plt.figure(figsize=(12, 8), dpi=300)
+        plt.figure(figsize=(14, 10), dpi=300)
         sns.heatmap(monthly_returns, annot=True, fmt=".2%", cmap='RdYlGn', cbar=True, 
-                    center=0, linewidths=.5, square=True, annot_kws={"size": 8})
-        plt.title('Monthly Returns Heatmap', fontsize=16)
-        plt.xlabel('Month', fontsize=12)
-        plt.ylabel('Year', fontsize=12)
+                    center=0, linewidths=.5, square=True, annot_kws={"size": 10})
+        plt.title('Monthly Returns Heatmap', fontsize=21)
+        plt.xlabel('Month', fontsize=18)
+        plt.ylabel('Year', fontsize=18)
         plt.yticks(rotation=0)
         plt.xticks(ticks=np.arange(0.5, 12.5), labels=[calendar.month_abbr[i] for i in range(1, 13)], rotation=0)
         plt.tight_layout()
@@ -742,21 +762,87 @@ class Strato:
 
         yearly_returns = df.groupby('year')['returns'].apply(lambda x: (x + 1).prod() - 1)
 
-        plt.figure(figsize=(12, 6), dpi=300)
+        plt.figure(figsize=(14, 10), dpi=300)
         bars = plt.barh(yearly_returns.index, yearly_returns * 100, height=0.6)
         plt.axvline(x=0, color='black', linestyle='-', linewidth=0.8)
-        plt.title('Yearly Returns', fontsize=16)
-        plt.xlabel('Returns (%)', fontsize=12)
-        plt.ylabel('Year', fontsize=12)
+        plt.title('Yearly Returns', fontsize=21)
+        plt.xlabel('Returns (%)', fontsize=18)
+        plt.ylabel('Year', fontsize=18)
         plt.grid(True, axis='x', linestyle='--', alpha=0.7)
 
         for bar in bars:
             width = bar.get_width()
             plt.text(width, bar.get_y() + bar.get_height()/2, 
-                    f'{width:.2f}%', ha='left', va='center', fontsize=10)
+                    f'{width:.2f}%', ha='left', va='center', fontsize=12)
 
         for bar in bars:
             if bar.get_width() < 0:
+                bar.set_color('red')
+            else:
+                bar.set_color('green')
+
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+    def _plot_drawdowns(self, dates, portfolio_values, save_path):
+        """
+        Plot drawdowns in the portfolio value over time.
+
+        Args:
+            dates (List[datetime.datetime]): Corresponding dates.
+            portfolio_values (np.array): Array of portfolio values.
+            save_path (str): Path to save the plot.
+        """
+        peak = np.maximum.accumulate(portfolio_values)
+        drawdown = (portfolio_values - peak) / peak
+        drawdown_series = pd.Series(drawdown)
+        major_drawdowns = drawdown_series.nsmallest(3).index
+        
+        plt.figure(figsize=(12, 8), dpi=300)
+        plt.plot(dates[:-1], portfolio_values, label='Portfolio Value', color='blue')
+        
+        for drawdown in major_drawdowns:
+            plt.axvline(dates[drawdown], color='red', linestyle='--', label='Major Drawdown' if drawdown == major_drawdowns[0] else "")
+        
+        plt.xlabel('Date', fontsize=18)
+        plt.ylabel('Portfolio Value', fontsize=18)
+        plt.title('Portfolio Value and Major Drawdowns Over Time', fontsize=21)
+        plt.legend(fontsize=15)
+        plt.tight_layout()
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.close()
+
+    def _plot_weekly_returns(self, dates, returns, save_path):
+        """
+        Plot a horizontal bar graph of weekly returns.
+
+        Args:
+            dates (List[datetime.datetime]): Corresponding dates.
+            returns (np.array): Array of daily returns.
+            save_path (str): Path to save the plot.
+        """
+        df = pd.DataFrame({'date': dates[1:], 'returns': returns})
+        df.set_index('date', inplace=True)
+        
+        # Resample the returns to weekly frequency and compute the product of returns for each week
+        weekly_returns = df['returns'].resample('W').apply(lambda x: (1 + x).prod() - 1)
+        
+        plt.figure(figsize=(14, 10), dpi=300)
+        bars = plt.bar(weekly_returns.index, weekly_returns * 100, width=5)
+        plt.axhline(y=0, color='black', linestyle='-', linewidth=0.8)
+        plt.title('Weekly Returns', fontsize=20)
+        plt.xlabel('Week', fontsize=16)
+        plt.ylabel('Returns (%)', fontsize=16)
+        plt.grid(True, axis='y', linestyle='--', alpha=0.7)
+
+        for bar in bars:
+            height = bar.get_height()
+            plt.text(bar.get_x() + bar.get_width()/2, height, 
+                    f'{height:.2f}%', ha='center', va='bottom' if height >= 0 else 'top', fontsize=12)
+
+        for bar in bars:
+            if bar.get_height() < 0:
                 bar.set_color('red')
             else:
                 bar.set_color('green')
