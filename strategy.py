@@ -51,41 +51,62 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
         self.positions: Dict[str, Position] = {}
         print("Initialized.")
         
-    def _rebalance_portfolio(self, close: np.ndarray, mom: np.ndarray, sma_short: np.ndarray, sma_long: np.ndarray, date_idx: int):
-        qualified_stocks = []
+    def _make_rankings(self, close: np.ndarray, mom: np.ndarray, sma_short, date_idx):
         
-        # Mapping date index to actual date
+        qualified_stocks = []
         actual_date = next(date for date, idx in self.date_to_index.items() if idx == date_idx)
         
-        for symbol, symbol_idx in self.const_d2i.get(actual_date, {}).items():
-            # Check for gaps
-            price_history = close[date_idx-self.lookback:date_idx+1, symbol_idx]
-            if np.any(np.diff(price_history) / price_history[:-1] > 0.15):
-                continue
+        for symbol, pos in self.positions.items():
+            if symbol in list(self.const_d2i[actual_date].keys()):
+                symbol_idx = self.const_d2i[actual_date][symbol]
+                
+                price_history = close[date_idx-self.lookback:date_idx+1, symbol_idx]
+                if np.any(np.diff(price_history) / price_history[:-1] > 0.15):
+                    continue
+                
+                # Check if above short MA
+                if close[date_idx, symbol_idx] < sma_short[date_idx, symbol_idx]:
+                    continue
+                
+                # Check momentum
+                if mom[date_idx, symbol_idx] < self._min_momentum:
+                    continue
             
-            # Check if above short MA
-            if close[date_idx, symbol_idx] < sma_short[date_idx, symbol_idx]:
-                continue
-            
-            # Check momentum
-            if mom[date_idx, symbol_idx] < self._min_momentum:
-                continue
-            
-            qualified_stocks.append((symbol, mom[date_idx, symbol_idx]))
+                qualified_stocks.append((symbol, mom[date_idx, symbol_idx]))
         
-        # Rank stocks by momentum
-        ranked_stocks = sorted(qualified_stocks, key=lambda x: x[1], reverse=True)
+        return sorted(qualified_stocks, key=lambda x: x[1], reverse=True)
         
+        
+    def _rebalance_portfolio(self, ranked_stocks, mom, close, sma_short, date_idx):
+        actual_date = next(date for date, idx in self.date_to_index.items() if idx == date_idx)
         # Sell all current positions not in top 20%
         top_20_percent = set([s[0] for s in ranked_stocks[:int(len(ranked_stocks)*0.2)]])
         for symbol in list(self.positions.keys()):
             if symbol not in top_20_percent and self.positions[symbol].get_current_quantity() > 0:
                 self.sell(symbol, self.positions[symbol].get_current_quantity())
-        
-        return ranked_stocks
+                
+        for symbol in list(self.positions.keys()):
+            if symbol in self.const_d2i[actual_date] and self.positions[symbol].get_current_quantity() > 0:
+                symbol_idx = self.const_d2i[actual_date][symbol]
+                
+                price_history = close[date_idx-self.lookback:date_idx+1, symbol_idx]
+                if np.any(np.diff(price_history) / price_history[:-1] > 0.15):
+                    self.sell(symbol, self.positions[symbol].get_current_quantity())
+                    continue
+                
+                # Check if above short MA
+                if close[date_idx, symbol_idx] < sma_short[date_idx, symbol_idx]:
+                    self.sell(symbol, self.positions[symbol].get_current_quantity())
+                    continue
+                
+                # Check momentum
+                if mom[date_idx, symbol_idx] < self._min_momentum:
+                    self.sell(symbol, self.positions[symbol].get_current_quantity())
+                    continue
+         
     
     def _calculate_position_size(self, symbol: str, close: float, atr: float):
-        risk_per_stock = self.broker.get_portfolio_value() * 0.001
+        risk_per_stock = self.broker.get_portfolio_value() * 0.002 # 2% of the portfolio at risk
         return int(risk_per_stock / atr)
     
     def _rebalance_positions(self, ranked_stocks: List[Tuple[str, float]], close: np.ndarray, atr_20: np.ndarray, sma_long: np.ndarray, sma_short: np.ndarray, date_idx: int):
@@ -94,7 +115,7 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
         # Adjust existing positions
         for symbol in list(self.positions.keys()):
             current_size = self.positions[symbol].get_current_quantity()
-            if current_size <= 0 or symbol not in list(self.const_d2i.keys()):
+            if current_size <= 0 or symbol not in list(self.const_d2i[actual_date].keys()):
                 continue
             symbol_idx = self.const_d2i[actual_date][symbol]
             target_size = self._calculate_position_size(symbol, close[date_idx, symbol_idx], atr_20[date_idx, symbol_idx])
@@ -120,6 +141,15 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
                             self.buy(symbol, size)
                         else:
                             break  # No more cash available
+                        
+    def _sell_non_members(self, date_idx: int):
+        actual_date = next(date for date, idx in self.date_to_index.items() if idx == date_idx)
+        for symbol in list(self.positions.keys()):
+            current_size = self.positions[symbol].get_current_quantity()
+            
+            if current_size > 0 and symbol not in list(self.const_d2i[actual_date].keys()):
+                self.sell(symbol, self.positions[symbol].get_current_quantity())
+
     
     def generate_signals(self, date_idx: int, indicator_calculator: IndicatorCalculator,
                          positions: Dict[str, Position], symbol_to_index: Dict[str, int], benchmark: pd.DataFrame):
@@ -144,8 +174,12 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
             
         self.signals = {}  # New signals to populate
         
+        ranked_stocks = self._make_rankings(close, mom, sma_short, date_idx)
+        
+        self._sell_non_members(date_idx)
+        
         if date_idx % 5 == 0:  # Approximating rebalancing
-            ranked_stocks = self._rebalance_portfolio(close, mom, sma_short, sma_long, date_idx)
+            self._rebalance_portfolio(ranked_stocks, mom, close, sma_short, date_idx)
             
         if date_idx % 10 == 0:
             self._rebalance_positions(ranked_stocks, close, atr_20, sma_long, sma_short, date_idx)
