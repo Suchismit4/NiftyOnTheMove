@@ -3,12 +3,12 @@ import numpy as np
 from typing import Tuple, Dict, List, Union
 from datetime import datetime
 
-def load_and_transform_csv(csv_paths: Union[str, List[str]], replace_nans: bool = True) -> Tuple[np.ndarray, Dict[str, int], Dict[str, int], Dict[datetime, int], datetime, datetime, List[str]]:
+def load_and_transform_csv(path: str, replace_nans: bool = True) -> Tuple[np.ndarray, Dict[str, int], Dict[str, int], Dict[datetime, int], datetime, datetime, List[str]]:
     """
     Load data from CSV file(s) and transform it into a numpy tensor with log-scaled prices and returns.
 
     Args:
-    - csv_paths (Union[str, List[str]]): Path(s) to the CSV file(s).
+    - path: Path to the CSV file.
     - replace_nans (bool): Whether to replace NaNs with 0 in the tensor.
 
     Returns:
@@ -21,18 +21,10 @@ def load_and_transform_csv(csv_paths: Union[str, List[str]], replace_nans: bool 
       - end_date (datetime): The end date of the data.
       - features (List[str]): List of feature names.
     """
-    if isinstance(csv_paths, str):
-        csv_paths = [csv_paths]
-
-    dfs = []
-    for path in csv_paths:
-        df = pd.read_csv(path)
-        ticker = path.split('/')[-1].replace('.csv', '')
-        df['ticker'] = ticker
-        dfs.append(df)
+    df = pd.read_csv(path)
     
-    df = pd.concat(dfs)
-
+    df = df[['Date', 'Open', 'High', 'Low', 'Close', 'Volume', 'ticker']]
+    
     # Ensure the Date column is datetime type
     df['Date'] = pd.to_datetime(df['Date'])
 

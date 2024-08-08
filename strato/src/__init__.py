@@ -32,7 +32,7 @@ class Strato:
     
     def __init__(self, data: np.ndarray, symbol_to_index: Dict[str, int], 
                  feature_to_index: Dict[str, int], date_to_index: Dict[datetime.datetime, int], 
-                 starting_cash: float, trade_size: int, strategy: Strategy, benchmark: pd.DataFrame = None, generate_report: bool = False):
+                 starting_cash: float, strategy: Strategy, benchmark: pd.DataFrame = None, generate_report: bool = False):
         """
         Initialize the Strato backtesting environment.
 
@@ -42,7 +42,6 @@ class Strato:
             feature_to_index (Dict[str, int]): Mapping of features to their indices in the data array.
             date_to_index (Dict[datetime.datetime, int]): Mapping of dates to their indices in the data array.
             starting_cash (float): Initial cash balance.
-            trade_size (int): Number of units per trade.
             strategy (Strategy): Trading strategy to be tested.
         """
         logging.debug("Initializing Strato class")
@@ -52,7 +51,6 @@ class Strato:
         self.feature_to_index = feature_to_index
         self.date_to_index = date_to_index
         self.starting_cash = starting_cash
-        self.trade_size = trade_size
         self.strategy = strategy
         
         # Initialize positions, cash, and orders
@@ -64,23 +62,25 @@ class Strato:
         self.indicator_calculator = IndicatorCalculator(data, feature_to_index)
         self.last_valid_price = {symbol: None for symbol in symbol_to_index.keys()}
         
-        logging.debug(f"Initialized with data shape: {data.shape}, starting cash: {starting_cash}, trade size: {trade_size}")
+        logging.debug(f"Initialized with data shape: {data.shape}, starting cash: {starting_cash}")
         logging.debug(f"Symbols: {list(symbol_to_index.keys())}, Features: {list(feature_to_index.keys())}")
         self.benchmark = benchmark
         
         self.generate_report = generate_report
+        
+        self.broker = self.strategy.broker
+        self.broker.set(self.cash, self.cash)
                     
 
-    def add_indicator(self, name: str, indicator: Indicator, column: str = 'Close'):
+    def add_indicator(self, name: str, indicator: Indicator):
         """
         Add a new indicator to the backtesting environment.
 
         Args:
             name (str): Name of the indicator.
             indicator (Indicator): Indicator object.
-            column (str, optional): Data column to apply the indicator to. Defaults to 'Close'.
         """
-        self.indicator_calculator.add_indicator(name, indicator, column)
+        self.indicator_calculator.add_indicator(name, indicator)
         
     def log_trade(self, date, symbol, action, price, size, change):
         """
@@ -121,7 +121,7 @@ class Strato:
             daily_data = self.data[date_idx]
             
             # Generate trading signals for the current day
-            self.strategy.generate_signals(date_idx, self.indicator_calculator, self.positions, self.symbol_to_index)
+            self.strategy.generate_signals(date_idx, self.indicator_calculator, self.positions, self.symbol_to_index, self.benchmark)
             signals = self.strategy.get_signals()
             
             # Execute pending orders from the previous day
@@ -130,6 +130,7 @@ class Strato:
             # Calculate and record portfolio value and cash balance
             portfolio_value = self.calculate_portfolio_value(daily_data=daily_data)
             portfolio_values.append(portfolio_value)
+            self.broker.set(self.cash, portfolio_value)
             daily_cash.append(self.cash)
 
             # Process new signals and create orders
@@ -185,7 +186,9 @@ class Strato:
         """
         disposable_cash = self.cash
         
-        for symbol, signal in signals.items():
+        for symbol, order in signals.items():
+            signal = order[0]
+            quantity = order[1]
             symbol_idx = self.symbol_to_index[symbol]
             price = daily_data[symbol_idx, self.feature_to_index['Close']]
 
@@ -197,13 +200,13 @@ class Strato:
             position = self.positions[symbol]
 
             if signal == Strategy.BUY:
-                if disposable_cash >= self.data[self.date_to_index[date] + 1, symbol_idx, self.feature_to_index['Open']] * self.trade_size:
-                    disposable_cash -= self.data[self.date_to_index[date] + 1, symbol_idx, self.feature_to_index['Open']] * self.trade_size
-                    self._create_buy_order(symbol, date, price, position, symbol_idx)
+                if disposable_cash >= self.data[self.date_to_index[date] + 1, symbol_idx, self.feature_to_index['Open']] * quantity:
+                    disposable_cash -= self.data[self.date_to_index[date] + 1, symbol_idx, self.feature_to_index['Open']] * quantity
+                    self._create_buy_order(symbol, date, price, position, symbol_idx, quantity)
                 else:
                     logging.error(f"Tried to enter on {date} in {symbol} with {position} units for price of {price}. Rejected because of insufficient liquid funds: {disposable_cash}")
-            elif signal == Strategy.SELL and position.get_current_quantity() >= self.trade_size:
-                self._create_sell_order(symbol, date, price, position, symbol_idx)
+            elif signal == Strategy.SELL and position.get_current_quantity() >= quantity:
+                self._create_sell_order(symbol, date, price, position, symbol_idx, quantity)
 
             self._handle_position_with_invalid_price(symbol, position, price, date, symbol_idx)
 
@@ -227,7 +230,7 @@ class Strato:
             return None
         return price
 
-    def _create_buy_order(self, symbol, date, price, position, symbol_idx):
+    def _create_buy_order(self, symbol, date, price, position, symbol_idx, quantity):
         """
         Create a buy order.
 
@@ -238,10 +241,10 @@ class Strato:
             position (Position): Current position for the symbol.
             symbol_idx (int): Index of the symbol in the data array.
         """
-        logging.info(f'TRADE - ORDER CREATED, Date: {date} BUY MKT at {price} on {symbol} with {self.trade_size} units. {self.cash}/{self.calculate_portfolio_value(self.data[self.date_to_index[date]])}')
-        self.orders[symbol].append(Order(Strategy.BUY, date, self.trade_size, position, symbol_idx))
+        logging.info(f'TRADE - ORDER CREATED, Date: {date} BUY MKT at {price} on {symbol} with {quantity} units. {self.cash}/{self.calculate_portfolio_value(self.data[self.date_to_index[date]])}')
+        self.orders[symbol].append(Order(Strategy.BUY, date, quantity, position, symbol_idx))
 
-    def _create_sell_order(self, symbol, date, price, position, symbol_idx):
+    def _create_sell_order(self, symbol, date, price, position, symbol_idx, quantity):
         """
         Create a sell order.
 
@@ -252,8 +255,8 @@ class Strato:
             position (Position): Current position for the symbol.
             symbol_idx (int): Index of the symbol in the data array.
         """
-        logging.info(f'TRADE - ORDER CREATED, Date: {date} SELL MKT at {price} on {symbol} with {self.trade_size} units. {self.cash}/{self.calculate_portfolio_value(self.data[self.date_to_index[date]])}')
-        self.orders[symbol].append(Order(Strategy.SELL, date, self.trade_size, position, symbol_idx))
+        logging.info(f'TRADE - ORDER CREATED, Date: {date} SELL MKT at {price} on {symbol} with {quantity} units. {self.cash}/{self.calculate_portfolio_value(self.data[self.date_to_index[date]])}')
+        self.orders[symbol].append(Order(Strategy.SELL, date, quantity, position, symbol_idx))
 
     def _handle_position_with_invalid_price(self, symbol, position, price, date, symbol_idx):
         """
@@ -269,7 +272,7 @@ class Strato:
         if position.get_current_quantity() > 0 and (np.isnan(price) or price == 0):
             logging.warning(f"Invalid price for {symbol} while holding position. Selling at last valid price.")
             sell_price = self.last_valid_price[symbol]
-            self.orders[symbol].append(Order(Strategy.SELL, date, self.trade_size, position, symbol_idx))
+            self.orders[symbol].append(Order(Strategy.SELL, date, position.get_current_quantity(), position, symbol_idx))
 
     def calculate_portfolio_value(self, daily_data: np.ndarray) -> float:
         """

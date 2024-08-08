@@ -52,8 +52,8 @@ if __name__ == "__main__":
         
     # Create strategy
     strategy = OutOfWhackMarketAnomoly(rsi_short_window=2, 
-                                       rsi_long_window=25,
-                                       threshold=15)
+                                       rsi_long_window=20,
+                                       threshold=15.5)
 
     # Create a Strato instance for a strategy
     strato = Strato(data,
@@ -61,12 +61,12 @@ if __name__ == "__main__":
                     feature_to_index,
                     date_to_index,
                     starting_cash=100000.0,
-                    trade_size=5,
+                    trade_size=10,
                     strategy=strategy, benchmark=bchk, generate_report=True)
 
     # Add indicators
     strato.add_indicator('RSI_2', RSI(2, inverse_logistic=True))
-    strato.add_indicator('RSI_25', RSI(25))
+    strato.add_indicator('RSI_20', RSI(20))
 
     # Run backtest
     results = strato.run_backtest()

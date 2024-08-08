@@ -2,10 +2,12 @@ from abc import ABC, abstractmethod
 import numpy as np
 from typing import Dict, Tuple
 
+from tqdm import tqdm
+
 class Indicator(ABC):
     """
     Abstract base class for technical indicators.
-    """
+    """ 
 
     @abstractmethod
     def init(self, data: np.ndarray) -> Tuple[np.ndarray, int]:
@@ -54,7 +56,7 @@ class IndicatorCalculator:
         self.indicator_values: Dict[str, np.ndarray] = {}
         self.carrys: Dict[str, np.ndarray] = {}
 
-    def add_indicator(self, name: str, indicator: Indicator, column: str = 'Close'):
+    def add_indicator(self, name: str, indicator: Indicator):
         """
         Add a new indicator to be calculated.
         Args:
@@ -62,9 +64,7 @@ class IndicatorCalculator:
             indicator (Indicator): Indicator object.
             column (str, optional): Data column to use for the indicator. Defaults to 'Close'.
         """
-        column_index = self.feature_to_index[column]
-        values = self.data[:, :, column_index]
-        _, initial_value, start_position = indicator.init(values)
+        _, initial_value, start_position = indicator.init(self.data, self.feature_to_index)
         self.carrys[name] = _
         self.indicators[name] = (indicator, start_position)
         self.indicator_values[name] = np.full((self.data.shape[0], self.data.shape[1]), np.nan)
@@ -77,11 +77,10 @@ class IndicatorCalculator:
             int: The maximum start position among all indicators.
         """
         start_positions = []
-        column_index = self.feature_to_index['Close']  # Assuming 'Close' for now
-        values = self.data[:, :, column_index]
+        values = self.data
         for name, (indicator, start_position) in self.indicators.items():
             carry = self.carrys[name]  # Initialize carry with the last pre-calculated value
-            for i in range(start_position, self.data.shape[0]):
+            for i in tqdm(range(start_position, self.data.shape[0]), f"Calculating {name} indicator"):
                 current_value = values[i - 1]
                 new_data = values[i]
                 carry, updated_value = indicator.step(current_value, new_data, carry)
