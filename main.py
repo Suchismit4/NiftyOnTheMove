@@ -45,11 +45,13 @@ if __name__ == "__main__":
                  constituents    = constituents, 
                  symbol_to_index = symbol_to_index,
                  date_to_index   = date_to_index, 
-                 lookback      = 90, 
+                 lookback      = 125, 
                  sma_short     = 100,
                  sma_long      = 200, 
-                 volatility    = 20,
-                 _min_momentum = 0.,
+                 volatility    = 25,
+                 portfolio_at_risk = 0.0015,
+                 min_momentum      =  40.,
+                 max_stocks        = 20
                  )
 
     # Create a Strato instance for a strategy
@@ -61,17 +63,18 @@ if __name__ == "__main__":
                     strategy=strategy, benchmark=bchk, generate_report=True)
 
     # Add indicators
-    strato.add_indicator('Momentum_90', Momentum(90, inverse_logistic=False))
+    strato.add_indicator('Momentum_125', Momentum(125, inverse_logistic=False))
     strato.add_indicator('SMA_100', ExponentialMovingAverage(100))
     strato.add_indicator('SMA_200', ExponentialMovingAverage(200))
-    strato.add_indicator('ATR_20', AverageTrueRange(20))
+    strato.add_indicator('ATR_25', AverageTrueRange(25))
+    strato.add_indicator('Volatility_25', Volatility(window = 25, annualize= True, ewma=False, parkinson=False))
     strato.add_indicator('Close', Close())
 
 
     # Run backtest
     results = strato.run_backtest()
 
-    print(f'Starting Portfolio Value: ₹{100000.00}')
+    print(f'Starting Portfolio Value: ₹1,00,000')
     print(f'Final Portfolio Value: ₹{results[-1]:.2f}')
     
     

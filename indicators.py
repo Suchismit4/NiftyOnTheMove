@@ -202,6 +202,85 @@ class AverageTrueRange(Indicator):
 
         return new_carry, new_atr
     
+    
+class Volatility(Indicator):
+    def __init__(self, window: int = 20, annualize: bool = True, ewma: bool = False, parkinson: bool = False):
+        """
+        Initialize the Volatility indicator.
+        
+        Args:
+            window (int): The number of periods to consider for volatility calculation. Default is 20.
+            annualize (bool): Whether to annualize the volatility. Default is True.
+            ewma (bool): Whether to use Exponentially Weighted Moving Average. Default is False.
+            parkinson (bool): Whether to use Parkinson's volatility estimator. Default is False.
+        """
+        self.window = window
+        self.annualize = annualize
+        self.ewma = ewma
+        self.parkinson = parkinson
+        
+        if self.ewma:
+            self.lambda_param = 0.94  # EWMA decay factor, typically 0.94 for daily data
+        
+        self.sqrt_252 = np.sqrt(252)  # Annualization factor for daily data
+
+    def init(self, data: np.ndarray, feature_to_index: Dict) -> Tuple[np.ndarray, np.ndarray, int]:
+        self.feature_to_index = feature_to_index
+        
+        if data.shape[0] < self.window:
+            return np.full((self.window, data.shape[1]), np.nan), np.full(data.shape[1], np.nan), 0
+        
+        close_prices = data[:self.window, :, self.feature_to_index['Close']]
+        
+        if self.parkinson:
+            high_prices = data[:self.window, :, self.feature_to_index['High']]
+            low_prices = data[:self.window, :, self.feature_to_index['Low']]
+            log_hl = np.log(high_prices / low_prices)
+            vol = np.sqrt(np.sum(log_hl**2, axis=0) / (4 * self.window * np.log(2)))
+        else:
+            returns = np.log(close_prices[1:] / close_prices[:-1])
+            
+            if self.ewma:
+                weights = (1 - self.lambda_param) * self.lambda_param**np.arange(self.window-1)[::-1]
+                weights /= np.sum(weights)
+                vol = np.sqrt(np.sum(weights * returns**2, axis=0))
+            else:
+                vol = np.std(returns, axis=0)
+        
+        if self.annualize:
+            vol *= self.sqrt_252
+        
+        carry = np.vstack([close_prices])
+        
+        return carry, vol, self.window
+
+    def step(self, current_value: np.ndarray, new_data: np.ndarray, carry: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+        new_close = new_data[:, self.feature_to_index['Close']]
+        close_prices = np.vstack((carry[1:], new_close))
+        
+        if self.parkinson:
+            new_high = new_data[:, self.feature_to_index['High']]
+            new_low = new_data[:, self.feature_to_index['Low']]
+            log_hl = np.log(new_high / new_low)
+            vol = np.sqrt(log_hl**2 / (4 * np.log(2)))
+        else:
+            returns = np.log(close_prices[1:] / close_prices[:-1])
+            
+            if self.ewma:
+                weights = (1 - self.lambda_param) * self.lambda_param**np.arange(self.window-1)[::-1]
+                weights /= np.sum(weights)
+                vol = np.sqrt(np.sum(weights * returns**2, axis=0))
+            else:
+                vol = np.std(returns, axis=0)
+        
+        if self.annualize:
+            vol *= self.sqrt_252
+        
+        carry = np.vstack([close_prices])
+        
+        return carry, vol
+    
+    
 class Momentum(Indicator):
     def __init__(self, window: int = 90, inverse_logistic: bool = False):
         self.window = window
@@ -244,7 +323,7 @@ class Momentum(Indicator):
         slope = ssxym / ssxm
         
         slope = ssxym / ssxm
-        annualized = (np.exp(slope * 252)) - 1
+        annualized = ((np.exp(slope * 252)) - 1) * 100
         momentum = annualized * (r ** 2)
 
         trend = self._apply_inverse_logistic(momentum)
@@ -255,7 +334,6 @@ class Momentum(Indicator):
     def step(self, current_value: np.ndarray, new_data: np.ndarray, carry: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         new_close = new_data[:, self.feature_to_index['Close']]
         new_log_price = np.log(new_close)
-
         # Update the carry with new data point new_log_price
         y = np.vstack((carry[1:], new_log_price))
         
@@ -277,7 +355,7 @@ class Momentum(Indicator):
         slope = ssxym / ssxm
         
         slope = ssxym / ssxm
-        annualized = (np.exp(slope * 252)) - 1
+        annualized = ((np.exp(slope * 252)) - 1) * 100
         momentum = annualized * (r ** 2)
 
         trend = self._apply_inverse_logistic(momentum)

@@ -136,6 +136,12 @@ class Strato:
             # Process new signals and create orders
             self._process_signals(date, signals, daily_data)
             
+            for symbol in self.symbol_to_index.keys():
+                self._handle_invalid_price(symbol=symbol, date=date, price=daily_data[self.symbol_to_index[symbol], self.feature_to_index['Open']])
+            
+            for symbol in self.symbol_to_index.keys():
+                self._handle_position_with_invalid_price(symbol, self.positions[symbol], daily_data[self.symbol_to_index[symbol], self.feature_to_index['Open']], date, self.symbol_to_index[symbol])
+            
             self._update_positions()
 
         logging.debug("Backtest completed")
@@ -149,7 +155,7 @@ class Strato:
             pos = self.positions[sym]
             
             if len(pos.get_positions()) >= 0:
-                pos.bars_since_entry += 1
+                pos.bars_since_entry += 1 # fix this to reset
 
     def _execute_pending_orders(self, date, daily_data):
         """
@@ -208,8 +214,6 @@ class Strato:
             elif signal == Strategy.SELL and position.get_current_quantity() >= quantity:
                 self._create_sell_order(symbol, date, price, position, symbol_idx, quantity)
 
-            self._handle_position_with_invalid_price(symbol, position, price, date, symbol_idx)
-
     def _handle_invalid_price(self, symbol, date, price):
         """
         Handle cases where the price is invalid (NaN or zero).
@@ -218,18 +222,10 @@ class Strato:
             symbol (str): Symbol being traded.
             date (datetime.datetime): Current date.
             price (float): Current price (which may be invalid).
-
-        Returns:
-            float: Valid price to use, or None if no valid price is available.
         """
-        if self.last_valid_price[symbol] is not None:
-            price = self.last_valid_price[symbol]
-            logging.warning(f"Invalid price for {symbol} on {date}. Using last valid price: {price}")
-        else:
-            logging.error(f"No valid price available for {symbol} on {date}. Skipping trade.")
-            return None
-        return price
-
+        if self.last_valid_price[symbol] is None and (not np.isnan(price) or price != 0.):
+            self.last_valid_price[symbol] = price
+            
     def _create_buy_order(self, symbol, date, price, position, symbol_idx, quantity):
         """
         Create a buy order.
@@ -272,7 +268,10 @@ class Strato:
         if position.get_current_quantity() > 0 and (np.isnan(price) or price == 0):
             logging.warning(f"Invalid price for {symbol} while holding position. Selling at last valid price.")
             sell_price = self.last_valid_price[symbol]
-            self.orders[symbol].append(Order(Strategy.SELL, date, position.get_current_quantity(), position, symbol_idx))
+            if not np.isnan(sell_price) or sell_price != 0.:
+                self.orders[symbol].append(Order(Strategy.SELL, date, position.get_current_quantity(), position, symbol_idx, sell_price))
+            else:
+                logging.info(f'MISSING PRICE - Tried to create a sell order for a suddenly missing symbol {symbol} but failed at date {date} for {position.get_current_quantity()}')
 
     def calculate_portfolio_value(self, daily_data: np.ndarray) -> float:
         """
@@ -596,7 +595,7 @@ class Strato:
         benchmark_dates = mdates.date2num(self.benchmark['Date'])
         
         # Plot strategy returns
-        plt.plot_date(strategy_dates, cumulative_returns, '-', color='#2ca02c', label="Strategy return")
+        plt.plot_date(strategy_dates, cumulative_returns, '-', color='blue', label="Strategy return")
         
         # Plot benchmark returns
         benchmark_returns =  np.log(self.benchmark['Close']).diff().shift(-1)
