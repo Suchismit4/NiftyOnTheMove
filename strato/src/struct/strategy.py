@@ -1,26 +1,10 @@
 import numpy as np
 from abc import ABC, abstractmethod
 from typing import Dict
-import equinox as eqx
+
+from ..flow.broker import Broker
 from ..flow.position import Position
 import pandas as pd
-
-class Broker():
-    
-    def __init__(self):
-        self.cash = -np.inf
-        self.portfolio_value = -np.inf
-        pass
-
-    def set(self, cash, portfolio_value): 
-        self.cash = cash
-        self.portfolio_value = portfolio_value
-        
-    def get_disposable_cash(self):
-        return self.cash
-    
-    def get_portfolio_value(self):
-        return self.portfolio_value
 
 class Strategy(ABC):
     """
@@ -37,26 +21,28 @@ class Strategy(ABC):
         """
         self.signals = {}
         self.name = "A Strategy"
-        self.broker = Broker()
-    
+        self.broker = None
+
     def __getname__(self):
         return self.name
 
-    def buy(self, symbol: str, quantity = 10):
+    def buy(self, symbol: str, quantity: float = 10):
         """
         Set a buy signal for a given symbol.
 
         Args:
             symbol (str): The asset symbol.
+            quantity (float): The asset quantity to be purchased.
         """
         self.signals[symbol] = [self.BUY, quantity]
 
-    def sell(self, symbol: str, quantity = 10):
+    def sell(self, symbol: str, quantity: float = 10):
         """
         Set a sell signal for a given symbol.
 
         Args:
             symbol (str): The asset symbol.
+            quantity (float): The asset quantity to be purchased.
         """
         self.signals[symbol] = [self.SELL, quantity]
 
@@ -78,10 +64,20 @@ class Strategy(ABC):
         """
         return self.signals
 
-    @abstractmethod
-    def generate_signals(self, date_idx: int, indicator_calculator, positions: Dict[str, Position], symbol_to_index: Dict[str, int], benchmark: pd.DataFrame = None):
+    def set_broker(self, broker: Broker):
         """
-        Generate trading signals based on the current market state.
+        Set the broker object.
+
+        Args:
+            broker (Broker): The broker object.
+        """
+
+        self.broker = broker
+
+    @abstractmethod
+    def step(self, date_idx: int, indicator_calculator, positions: Dict[str, Position], symbol_to_index: Dict[str, int], benchmark: pd.DataFrame = None):
+        """
+        Generate trading signals based on the current market state as it steps through time
 
         This method should be implemented by concrete strategy classes.
 
@@ -90,5 +86,6 @@ class Strategy(ABC):
             indicator_calculator: An object that calculates technical indicators.
             positions (Dict[str, Position]): A dictionary of current positions.
             symbol_to_index (Dict[str, int]): A mapping of symbols to their indices.
+            benchmark (pd.DataFrame): A benchmark dataframe.
         """
         pass

@@ -77,7 +77,7 @@ class ExponentialMovingAverage(Indicator):
             window (int): The number of periods to consider for the EMA calculation.
         """
         self.window = window
-        self.alpha = 2 / (window)  # Smoothing factor for EMA
+        self.alpha = 2 / (window + 1)  # Smoothing factor for EMA
 
     def init(self, data: np.ndarray, feature_to_index: Dict) -> Tuple[np.ndarray, np.ndarray, int]:
         """

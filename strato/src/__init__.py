@@ -12,7 +12,13 @@ import shutil
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from backtrader import strategies
+from numba.core.utils import benchmark
+
+from .flow.broker import Broker
+
 plt.style.use('dark_background')
+from pandas import Timestamp
 import seaborn as sns
 import matplotlib.dates as mdates
 
@@ -22,6 +28,22 @@ from .flow.position import Position
 from .struct.indicator import IndicatorCalculator, Indicator
 from .flow.order import Order
 
+
+def log_trade(date, symbol, action, price, size, change):
+    """
+    Log details of a trade for analysis.
+
+    Args:
+        date (datetime.datetime): Date of the trade.
+        symbol (str): Symbol traded.
+        action (str): Buy or Sell.
+        price (float): Execution price.
+        size (int): Number of units traded.
+        change (float): Change in cash balance due to the trade.
+    """
+    logging.info(f"TRADE EXECUTED - Date: {date}, Symbol: {symbol}, Action: {action}, Price: {price}, Size: {size}, Change from execution: {change}")
+
+
 class Strato:
     """
     Main class for backtesting trading strategies.
@@ -30,9 +52,15 @@ class Strato:
     order execution, and performance tracking.
     """
     
-    def __init__(self, data: np.ndarray, symbol_to_index: Dict[str, int], 
-                 feature_to_index: Dict[str, int], date_to_index: Dict[datetime.datetime, int], 
-                 starting_cash: float, strategy: Strategy, benchmark: pd.DataFrame = None, generate_report: bool = False):
+    def __init__(self, data: np.ndarray, 
+                 symbol_to_index: Dict[str, int], 
+                 feature_to_index: Dict[str, int], 
+                 date_to_index: Dict[datetime.datetime, int], 
+                 starting_cash: float, 
+                 strategies: List[Strategy], 
+                 benchmark: pd.DataFrame = None, 
+                 generate_report: bool = False,
+                 name: str = None):
         """
         Initialize the Strato backtesting environment.
 
@@ -42,8 +70,11 @@ class Strato:
             feature_to_index (Dict[str, int]): Mapping of features to their indices in the data array.
             date_to_index (Dict[datetime.datetime, int]): Mapping of dates to their indices in the data array.
             starting_cash (float): Initial cash balance.
-            strategy (Strategy): Trading strategy to be tested.
+            strategies (List[Strategy]): Trading strategies to be tested.
+            benchmark (pd.DataFrame): OPTIONAL If any benchmark is to be compared.
+            generate_report (bool): OPTIONAL specifies if we need to export a detailed report.
         """
+        self.trade_history = None
         logging.debug("Initializing Strato class")
         
         self.data = data
@@ -51,14 +82,17 @@ class Strato:
         self.feature_to_index = feature_to_index
         self.date_to_index = date_to_index
         self.starting_cash = starting_cash
-        self.strategy = strategy
+        self.strategies = strategies
+        self.name = name
         
         # Initialize positions, cash, and orders
-        self.positions = {symbol: Position(symbol, 0, 0, datetime.datetime.now()) for symbol in symbol_to_index.keys()}
+        self.positions = {symbol: Position(symbol, 0, 0, datetime.datetime.now())
+                          for symbol in symbol_to_index.keys()}
+
         self.cash = starting_cash
         self.orders = {symbol: [] for symbol in symbol_to_index.keys()}
         
-        # Initialize indicator calculator and last valid prices
+        # Initialize indicator calculator and last valid prices to track last valid prices
         self.indicator_calculator = IndicatorCalculator(data, feature_to_index)
         self.last_valid_price = {symbol: None for symbol in symbol_to_index.keys()}
         
@@ -68,9 +102,9 @@ class Strato:
         
         self.generate_report = generate_report
         
-        self.broker = self.strategy.broker
+        self.broker = Broker()
         self.broker.set(self.cash, self.cash)
-                    
+
 
     def add_indicator(self, name: str, indicator: Indicator):
         """
@@ -81,22 +115,8 @@ class Strato:
             indicator (Indicator): Indicator object.
         """
         self.indicator_calculator.add_indicator(name, indicator)
-        
-    def log_trade(self, date, symbol, action, price, size, change):
-        """
-        Log details of a trade for analysis.
 
-        Args:
-            date (datetime.datetime): Date of the trade.
-            symbol (str): Symbol traded.
-            action (str): Buy or Sell.
-            price (float): Execution price.
-            size (int): Number of units traded.
-            change (float): Change in cash balance due to the trade.
-        """
-        logging.info(f"TRADE EXECUTED - Date: {date}, Symbol: {symbol}, Action: {action}, Price: {price}, Size: {size}, Change from execution: {change}")
-
-    def run_backtest(self) -> List[float]:
+    def run_backtest(self, start_date: str = None) -> List[float]:
         """
         Run the backtest simulation.
 
@@ -105,7 +125,7 @@ class Strato:
         """
         logging.debug("Starting backtest")
         
-        if self.strategy is None:
+        if self.strategies is None:
             logging.error("Strategy not set. Please set a strategy before running the backtest.")
             raise ValueError("Strategy not set. Please set a strategy before running the backtest.")
 
@@ -113,17 +133,37 @@ class Strato:
         portfolio_values = []
         daily_cash = []
         dates = list(self.date_to_index.keys())
+
+        # Set the broker to all strategy objects
+        for strategy in self.strategies:
+            strategy.set_broker(self.broker)
+
         self.trade_history = []
+
+        if start_date is not None:
+            try:
+                # Convert start_date to Timestamp if it's not already
+                start_timestamp = Timestamp(start_date)
+                
+                # Find the index corresponding to the start date
+                min_start = next(idx for date, idx in self.date_to_index.items() if date == start_timestamp)
+            except StopIteration:
+                raise Exception("Invalid Date to start with")
         
         # Main backtest loop
         for date_idx in range(min_start, self.data.shape[0] - 1):
             date = dates[date_idx]
             daily_data = self.data[date_idx]
-            
+
+            signals = {s.name: {} for s in self.strategies}
+
+            # Loop through strategies in priority executing signals
             # Generate trading signals for the current day
-            self.strategy.generate_signals(date_idx, self.indicator_calculator, self.positions, self.symbol_to_index, self.benchmark)
-            signals = self.strategy.get_signals()
-            
+            for strategy in self.strategies:
+
+                strategy.step(date_idx, self.indicator_calculator, self.positions, self.symbol_to_index, benchmark=self.benchmark)
+                signals[strategy.name] = strategy.get_signals()
+
             # Execute pending orders from the previous day
             self._execute_pending_orders(date, daily_data)
             
@@ -134,7 +174,8 @@ class Strato:
             daily_cash.append(self.cash)
 
             # Process new signals and create orders
-            self._process_signals(date, signals, daily_data)
+            for signal in signals.values():
+                self._process_signals(date, signal, daily_data)
             
             for symbol in self.symbol_to_index.keys():
                 self._handle_invalid_price(symbol=symbol, date=date, price=daily_data[self.symbol_to_index[symbol], self.feature_to_index['Open']])
@@ -148,7 +189,7 @@ class Strato:
         if self.generate_report:
             self.generate_backtest_report(np.array(portfolio_values), dates[min_start:], [], daily_cash, self.trade_history)
         return portfolio_values
-    
+
     def _update_positions(self):
 
         for sym in self.positions:
@@ -165,21 +206,46 @@ class Strato:
             date (datetime.datetime): Current date.
             daily_data (np.ndarray): Market data for the current day.
         """
+        sell_orders = []
+        buy_orders = []
+
+        # Collect all orders across all symbols
         for sym in self.orders:
-            while self.orders[sym]:
-                order = self.orders[sym][0]
-                change, qty, execution_price, action = order.execute(daily_data, self.feature_to_index, date)
-                self.cash += change
-                self.log_trade(date, sym, action, execution_price, qty, change)
-                self.trade_history.append({
-                    'date': date,
-                    'symbol': sym,
-                    'action': action,
-                    'price': execution_price,
-                    'size': qty,
-                    'cash (after)': self.cash,
-                })
-                self.orders[sym].pop(0)
+            for order in self.orders[sym]:
+                if order.order_type == Strategy.SELL:
+                    sell_orders.append((sym, order))
+                elif order.order_type == Strategy.BUY:
+                    buy_orders.append((sym, order))
+
+        # Process all sell orders first
+        for sym, order in sell_orders:
+            change, qty, execution_price, action = order.execute(daily_data, self.feature_to_index, date)
+            self.cash += change
+            log_trade(date, sym, action, execution_price, qty, change)
+            self.trade_history.append({
+                'date': date,
+                'symbol': sym,
+                'action': action,
+                'price': execution_price,
+                'size': qty,
+                'cash (after)': self.cash,
+            })
+            self.orders[sym].remove(order)
+
+        # Process all buy orders next
+        for sym, order in buy_orders:
+            change, qty, execution_price, action = order.execute(daily_data, self.feature_to_index, date)
+            self.cash += change
+            log_trade(date, sym, action, execution_price, qty, change)
+            self.trade_history.append({
+                'date': date,
+                'symbol': sym,
+                'action': action,
+                'price': execution_price,
+                'size': qty,
+                'cash (after)': self.cash,
+            })
+            self.orders[sym].remove(order)
 
     def _process_signals(self, date, signals, daily_data):
         """
@@ -214,14 +280,14 @@ class Strato:
             elif signal == Strategy.SELL and position.get_current_quantity() >= quantity:
                 self._create_sell_order(symbol, date, price, position, symbol_idx, quantity)
 
-    def _handle_invalid_price(self, symbol, date, price):
+    def _handle_invalid_price(self, symbol, date, price: np.ndarray):
         """
         Handle cases where the price is invalid (NaN or zero).
 
         Args:
             symbol (str): Symbol being traded.
             date (datetime.datetime): Current date.
-            price (float): Current price (which may be invalid).
+            price (np.ndarray): Current price (which may be invalid).
         """
         if self.last_valid_price[symbol] is None and (not np.isnan(price) or price != 0.):
             self.last_valid_price[symbol] = price
@@ -232,7 +298,7 @@ class Strato:
 
         Args:
             symbol (str): Symbol to buy.
-            date (datetime.datetime): Current date.
+            date (int): Current date.
             price (float): Current price.
             position (Position): Current position for the symbol.
             symbol_idx (int): Index of the symbol in the data array.
@@ -246,7 +312,7 @@ class Strato:
 
         Args:
             symbol (str): Symbol to sell.
-            date (datetime.datetime): Current date.
+            date (int): Current date.
             price (float): Current price.
             position (Position): Current position for the symbol.
             symbol_idx (int): Index of the symbol in the data array.
@@ -261,17 +327,17 @@ class Strato:
         Args:
             symbol (str): Symbol being traded.
             position (Position): Current position for the symbol.
-            price (float): Current price (which may be invalid).
-            date (datetime.datetime): Current date.
+            price (np.ndarray): Current price (which may be invalid).
+            date (int): Current date.
             symbol_idx (int): Index of the symbol in the data array.
         """
         if position.get_current_quantity() > 0 and (np.isnan(price) or price == 0):
-            logging.warning(f"Invalid price for {symbol} while holding position. Selling at last valid price.")
+            logging.error(f"Invalid price for {symbol} while holding position. Selling at last valid price.")
             sell_price = self.last_valid_price[symbol]
             if not np.isnan(sell_price) or sell_price != 0.:
-                self.orders[symbol].append(Order(Strategy.SELL, date, position.get_current_quantity(), position, symbol_idx, sell_price))
+                self.orders[symbol].append(Order(Strategy.SELL, date, position.get_current_quantity(), position, symbol_idx, execution_price_force=sell_price))
             else:
-                logging.info(f'MISSING PRICE - Tried to create a sell order for a suddenly missing symbol {symbol} but failed at date {date} for {position.get_current_quantity()}')
+                logging.error(f'MISSING PRICE - Tried to create a sell order for a suddenly missing symbol {symbol} but failed at date {date} for {position.get_current_quantity()}')
 
     def calculate_portfolio_value(self, daily_data: np.ndarray) -> float:
         """
@@ -304,22 +370,6 @@ class Strato:
         }
         logging.debug(f"Current state: {state}")
         return state
-    
-    def _calculate_upi(self, returns, risk_free_rate=0.02):
-        """
-        Calculate the Ulcer Performance Index.
-
-        Args:
-            returns (np.array): Array of returns.
-            risk_free_rate (float, optional): Risk-free rate. Defaults to 0.02.
-
-        Returns:
-            float: Ulcer Performance Index.
-        """
-        drawdowns = 1 - returns / np.maximum.accumulate(returns)
-        ulcer_index = np.sqrt(np.mean(np.square(drawdowns)))
-        upi = (np.mean(returns) - risk_free_rate) / ulcer_index
-        return upi
     
     def _calculate_sharpe_ratio(self, returns, annual_risk_free_rate=0.01, trading_days=252, convert_rate=True, annualize=False, stddev_sample=False):
         """
@@ -553,7 +603,7 @@ class Strato:
             \end{figure}
 
             \end{document}
-            """ % (self.strategy.__getname__(), sharpe_ratio, max_drawdown, normalized_annual_return, cumulative_returns_path, portfolio_value_path,
+            """ % (self.name, sharpe_ratio, max_drawdown, normalized_annual_return, cumulative_returns_path, portfolio_value_path,
                 rolling_sharpe_path, rolling_volatility_path, returns_quantile_3m_path, returns_quantile_6m_path, returns_quantile_12m_path,
                 monthly_returns_heatmap_path, returns_distribution_path, yearly_returns_path, weekly_returns_path, drawdowns_path)
 

@@ -6,12 +6,13 @@ from typing import *
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import datetime
 
 class StocksOnTheMoveByAndrewsClenow(Strategy):
     def __init__(self,
                  constituents: pd.DataFrame,
                  symbol_to_index: Dict[str, int],
-                 date_to_index: Dict[str, int],
+                 date_to_index: Dict[datetime.datetime, int],
                  lookback: int = 90,
                  sma_short: int = 100,
                  sma_long: int = 200,
@@ -27,7 +28,7 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
         Args:
             constituents (pd.DataFrame): The DataFrame containing the constituent information.
             symbol_to_index (Dict[str, int]): A dictionary mapping symbols to their indices.
-            date_to_index (Dict[str, int]): A dictionary mapping dates to their indices.
+            date_to_index (Dict[datetime.datetime, int]): A dictionary mapping dates to their indices.
             lookback (int): The lookback period for the momentum calculation.
             sma_short (int): The short-term Simple Moving Average window.
             sma_long (int): The long-term Simple Moving Average window.
@@ -70,7 +71,7 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
         self.trailing_stop_percent = trailing_stop_percent
         self.trailing_stops = {}
 
-    def _make_rankings(self, close_prices: np.ndarray, momentum: np.ndarray, sma_short: np.ndarray, date_idx: int) -> List[Tuple[str, float]]:
+    def _make_rankings(self, close_prices: np.ndarray, momentum: np.ndarray, sma_short: np.ndarray, date_idx: int) -> List[Tuple[str, np.ndarray]]:
         """
         Generates a ranking of qualified stocks based on momentum.
 
@@ -81,10 +82,10 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
             date_idx (int): The index of the current date.
 
         Returns:
-            List[Tuple[str, float]]: A list of tuples containing the symbol and its momentum value.
+            List[Tuple[str, np.ndarray]]: A list of tuples containing the symbol and its momentum value.
         """
         qualified_stocks = []
-        actual_date = self._get_actual_date(date_idx)
+        actual_date = self._get_actual_date(date_idx) 
 
         # Evaluate each stock to determine if it meets the criteria for ranking
         for symbol, position in self.positions.items():
@@ -133,7 +134,7 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
             date_idx (int): The index of the current date.
         """
         actual_date = self._get_actual_date(date_idx)
-        top_20_percent_stocks = set([symbol for symbol, _ in ranked_stocks[:int(len(ranked_stocks) * 0.20)]])
+        top_20_percent_stocks = set([symbol for symbol, _ in ranked_stocks[:int(len(ranked_stocks) * 0.50)]])
 
         # Evaluate each stock in the current positions
         for symbol in list(self.positions.keys()):
@@ -143,11 +144,11 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
             # Sell positions not in the top 20%
             if symbol not in top_20_percent_stocks and position.get_current_quantity() > 0:
                 self.sell(symbol, position.get_current_quantity())
-            elif symbol_idx is not None:
+            elif symbol_idx is not None and position.get_current_quantity() > 0:
                 price_history = close_prices[date_idx - self.lookback:date_idx + 1, symbol_idx]
 
-                # Sell positions with more than 20% price change
-                if np.any(np.diff(price_history) / price_history[:-1] > 0.2):
+                # Sell positions with more than 50% price change
+                if np.any(np.diff(price_history) / price_history[:-1] > 0.5):
                     self.sell(symbol, position.get_current_quantity())
                 
                 # Sell positions below the short-term SMA
@@ -155,11 +156,9 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
                     self.sell(symbol, position.get_current_quantity())
                 
                 # Sell positions below the minimum momentum
-                elif momentum[date_idx, symbol_idx] < 0.25 * self.min_momentum:
+                elif momentum[date_idx, symbol_idx] < self.min_momentum:
                     self.sell(symbol, position.get_current_quantity())
-                    
-        if self.index_historical[date_idx] < self.index_historical_mean[date_idx]:
-            return
+                
 
         current_asset_count = sum(1 for pos in self.positions.values() if pos.get_current_quantity() > 0)
 
@@ -171,7 +170,7 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
                     symbol_idx = self.date_to_symbols_with_indices[actual_date][symbol]
                     if close_prices[date_idx, symbol_idx] > sma_short[date_idx, symbol_idx]:
                         size = self._calculate_position_size(symbol, close_prices[date_idx, symbol_idx], atr_20[date_idx, symbol_idx])
-                        if current_disposable_cash >= close_prices[date_idx, symbol_idx] * size:
+                        if current_disposable_cash >= close_prices[date_idx, symbol_idx] * size and self.index_historical[date_idx] > self.index_historical_mean[date_idx]:
                             self.buy(symbol, size)
                             current_asset_count += 1
                             current_disposable_cash -= close_prices[date_idx, symbol_idx] * size
@@ -206,34 +205,7 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
             date_idx (int): The index of the current date.
         """
         actual_date = self._get_actual_date(date_idx)
-
-        # Sell under-performing assets that either gapped or fell below conditions to hold
-        
-        for symbol, pos in self.positions.items():
             
-            # Check if we actually have any position in this asset
-            if (pos.get_current_quantity() <= 0.):
-                continue
-
-            # Fail-Safe to check if asset is in index for the current date.
-            if symbol not in self.date_to_symbols_with_indices[actual_date]:
-                self.sell(symbol, pos.get_current_quantity()) # if not then sell.
-                continue
-            
-            current_size = pos.get_current_quantity()
-            symbol_idx = self.date_to_symbols_with_indices[actual_date].get(symbol)
-            
-            price_history = close_prices[date_idx - self.lookback:date_idx + 1, symbol_idx]
-
-            # Sell positions below the short-term SMA
-            if close_prices[date_idx, symbol_idx] < sma_short[date_idx, symbol_idx]:
-                self.sell(symbol, pos.get_current_quantity())
-                
-            # Sell positions below the minimum momentum
-            elif momentum[date_idx, symbol_idx] < 0.5 * self.min_momentum:
-                self.sell(symbol, pos.get_current_quantity())
-            
-
         # Adjust existing positions
         for symbol, position in self.positions.items():
             current_size = position.get_current_quantity()
@@ -244,10 +216,10 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
 
             target_size = self._calculate_position_size(symbol, close_prices[date_idx, symbol_idx], atr_20[date_idx, symbol_idx])
 
-            # If the size difference is more than 15%, adjust the position
-            if abs(current_size - target_size) / current_size > 0.15:
-                if current_size < target_size:
-                    self.buy(symbol, abs(target_size - current_size))
+            # If the size difference is more than 5%, adjust the position
+            if abs(current_size - target_size) / current_size > 0.05:
+                if current_size < target_size and close_prices[date_idx, symbol_idx] > sma_short[date_idx, symbol_idx]:
+                    self.buy(symbol, abs(target_size - current_size)) 
                 elif current_size > target_size:
                     self.sell(symbol, abs(current_size - target_size))
 
@@ -263,7 +235,7 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
             if position.get_current_quantity() > 0 and symbol not in self.date_to_symbols_with_indices[actual_date]:
                 self.sell(symbol, position.get_current_quantity())
 
-    def generate_signals(self, date_idx: int, indicator_calculator: IndicatorCalculator, positions: Dict[str, Position], symbol_to_index: Dict[str, int], benchmark: pd.DataFrame):
+    def step(self, date_idx: int, indicator_calculator, positions: Dict[str, Position], symbol_to_index: Dict[str, int], benchmark: pd.DataFrame = None):
         """
         Generates the trading signals for the current date.
 
@@ -306,7 +278,7 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
         self._sell_non_members(date_idx)
 
         # Rebalance the positions every 5
-        if date_idx % 4 == 0:
+        if date_idx % 5 == 0:
             self._rebalance_positions(ranked_stocks, close_prices, atr_20, momentum, sma_short, date_idx)
 
         # Rebalance the portfolio every 10

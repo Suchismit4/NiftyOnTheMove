@@ -21,7 +21,7 @@ def setup_logging():
 
     # Configure logging to log to the file
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s',
-                        handlers=[logging.FileHandler(log_file), logging.StreamHandler()])
+                        handlers=[logging.FileHandler(log_file)])
     
 if __name__ == "__main__":
     print("Now backtesting NiftyOnTheMove...")
@@ -41,16 +41,16 @@ if __name__ == "__main__":
     setup_logging()
         
     # Create strategy
-    strategy = StocksOnTheMoveByAndrewsClenow (
+    long_term_momentum = StocksOnTheMoveByAndrewsClenow (
                  constituents    = constituents, 
                  symbol_to_index = symbol_to_index,
                  date_to_index   = date_to_index, 
-                 lookback      = 125, 
+                 lookback      = 120, 
                  sma_short     = 100,
                  sma_long      = 200, 
                  volatility    = 25,
-                 portfolio_at_risk = 0.0015,
-                 min_momentum      =  40.,
+                 portfolio_at_risk = 0.001,
+                 min_momentum      =  0.,
                  max_stocks        = 20
                  )
 
@@ -59,11 +59,12 @@ if __name__ == "__main__":
                     symbol_to_index,
                     feature_to_index,
                     date_to_index,
-                    starting_cash=100000.0,
-                    strategy=strategy, benchmark=bchk, generate_report=True)
+                    name = "NiftyOnTheMove",
+                    starting_cash=10_00_000.0,
+                    strategies=[long_term_momentum], benchmark=bchk, generate_report=True)
 
     # Add indicators
-    strato.add_indicator('Momentum_125', Momentum(125, inverse_logistic=False))
+    strato.add_indicator('Momentum_120', Momentum(120, inverse_logistic=False))
     strato.add_indicator('SMA_100', ExponentialMovingAverage(100))
     strato.add_indicator('SMA_200', ExponentialMovingAverage(200))
     strato.add_indicator('ATR_25', AverageTrueRange(25))
@@ -74,7 +75,7 @@ if __name__ == "__main__":
     # Run backtest
     results = strato.run_backtest()
 
-    print(f'Starting Portfolio Value: ₹1,00,000')
+    print(f'Starting Portfolio Value: ₹10,00,000')
     print(f'Final Portfolio Value: ₹{results[-1]:.2f}')
     
     

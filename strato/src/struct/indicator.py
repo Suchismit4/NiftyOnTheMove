@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from typing import Dict, Tuple
-
+import pandas as pd
 from tqdm import tqdm
 
 class Indicator(ABC):
@@ -55,7 +55,7 @@ class IndicatorCalculator:
         self.indicators: Dict[str, Tuple[Indicator, int]] = {}
         self.indicator_values: Dict[str, np.ndarray] = {}
         self.carrys: Dict[str, np.ndarray] = {}
-
+    
     def add_indicator(self, name: str, indicator: Indicator):
         """
         Add a new indicator to be calculated.
@@ -86,6 +86,7 @@ class IndicatorCalculator:
                 carry, updated_value = indicator.step(current_value, new_data, carry)
                 self.indicator_values[name][i] = updated_value
             start_positions.append(start_position)
+            
         return max(start_positions)
 
     def get_indicator(self, name: str) -> np.ndarray:

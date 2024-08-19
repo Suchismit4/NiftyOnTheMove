@@ -1,6 +1,7 @@
 import datetime
 import logging
 from typing import List, Dict
+import numpy as np
 
 class Position:
     """
@@ -82,12 +83,12 @@ class Position:
         logging.debug(f"Quantity adjusted. Current quantity: {self.current_quantity}, Realized PnL: {realized_pnl}")
         return realized_pnl
 
-    def calculate_value(self, current_price: float) -> float:
+    def calculate_value(self, current_price: np.ndarray) -> float:
         """
         Calculate the current value of the position.
 
         Args:
-            current_price (float): The current price per unit of the asset.
+            current_price (np.ndarray): The current price per unit of the asset.
 
         Returns:
             float: The total value of the position.

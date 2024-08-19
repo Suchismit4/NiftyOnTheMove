@@ -7,8 +7,9 @@ from ..struct.strategy import Strategy
 
 class Order:
     """Represents a trading order."""
+    
 
-    def __init__(self, order_type: int, order_date_idx: int, quantity: int, position: object, symbol: int, execution_price_force: float = 0.):
+    def __init__(self, order_type: int, order_date_idx: int, quantity: int, position: object, symbol: int, execution_price_force: float = None):
         """
         Initialize an Order object.
 
@@ -48,7 +49,7 @@ class Order:
             value = -1 * self.quantity * execution_price
             self.position.buy(self.quantity, execution_price, order_date)
         elif self.order_type == Strategy.SELL:
-            if self.execution_price_force > 0.:
+            if self.execution_price_force != None:
                 execution_price = self.execution_price_force
             value = self.quantity * execution_price
             self.position.sell(self.quantity, execution_price, order_date)
