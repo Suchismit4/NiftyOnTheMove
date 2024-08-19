@@ -60,7 +60,7 @@ if __name__ == "__main__":
                     feature_to_index,
                     date_to_index,
                     name = "NiftyOnTheMove",
-                    starting_cash=10_00_000.0,
+                    starting_cash=1000000.0,
                     strategies=[long_term_momentum], benchmark=bchk, generate_report=True)
 
     # Add indicators
@@ -68,7 +68,7 @@ if __name__ == "__main__":
     strato.add_indicator('SMA_100', ExponentialMovingAverage(100))
     strato.add_indicator('SMA_200', ExponentialMovingAverage(200))
     strato.add_indicator('ATR_25', AverageTrueRange(25))
-    strato.add_indicator('Volatility_25', Volatility(window = 25, annualize= True, ewma=False, parkinson=False))
+    strato.add_indicator('Volatility_25', Volatility(window = 25, annualize=False, ewma=False, parkinson=False))
     strato.add_indicator('Close', Close())
 
 

@@ -134,7 +134,7 @@ class StocksOnTheMoveByAndrewsClenow(Strategy):
             date_idx (int): The index of the current date.
         """
         actual_date = self._get_actual_date(date_idx)
-        top_20_percent_stocks = set([symbol for symbol, _ in ranked_stocks[:int(len(ranked_stocks) * 0.50)]])
+        top_20_percent_stocks = set([symbol for symbol, _ in ranked_stocks[:int(len(ranked_stocks) * 0.20)]])
 
         # Evaluate each stock in the current positions
         for symbol in list(self.positions.keys()):
