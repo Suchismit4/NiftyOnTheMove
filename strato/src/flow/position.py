@@ -1,12 +1,13 @@
 import datetime
 import logging
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import numpy as np
+
 
 class Position:
     """
     Represents a trading position for a specific asset.
-    
+
     This class manages the quantity, price, and date information for a trading position,
     allowing for adjustments and calculations related to the position.
     """
@@ -23,9 +24,15 @@ class Position:
         """
         self.asset = asset
         self.bars_since_entry = 0
-        self.entries = [{'quantity': initial_quantity, 'price': initial_price, 'date': date_entered}]
-        self.current_quantity = initial_quantity
-        logging.debug(f"Position initialized with entries: {self.entries} and current quantity: {self.current_quantity}")
+        self.open_lots = []
+        self.current_quantity = 0
+        if initial_quantity > 0:
+            self.open_lots.append({
+                'quantity': initial_quantity,
+                'price': initial_price,
+                'date': date_entered
+            })
+            self.current_quantity = initial_quantity
 
     def buy(self, quantity: int, price: float, date: datetime.datetime):
         """
@@ -36,12 +43,14 @@ class Position:
             price (float): The price per unit for this purchase.
             date (datetime.datetime): The date and time of this purchase.
         """
-        logging.debug(f"Buying more of asset: {self.asset}, quantity: {quantity}, price: {price}, date: {date}")
-        self.entries.append({'quantity': quantity, 'price': price, 'date': date})
+        self.open_lots.append({
+            'quantity': quantity,
+            'price': price,
+            'date': date
+        })
         self.current_quantity += quantity
-        logging.debug(f"Bought more of {self.asset}: {quantity} units at {price} on {date}")
 
-    def sell(self, quantity: int, price: float, date: datetime.datetime) -> float:
+    def sell(self, quantity: int, price: float, date: datetime.datetime) -> Tuple[float, List[Dict]]:
         """
         Sell some of the asset, decreasing the quantity of the position.
         This method uses a FIFO (First In, First Out) method when selling.
@@ -52,43 +61,59 @@ class Position:
             date (datetime.datetime): The date and time of this sale.
 
         Returns:
-            float: The realized profit and loss (PnL) from this sale.
+            Tuple[float, List[Dict]]: The realized profit and loss (PnL) from this sale,
+                                      and a list of closed trade lots.
 
         Raises:
             ValueError: If attempting to sell more than the current quantity.
         """
-        logging.debug(f"Selling asset: {self.asset}, quantity: {quantity}, price: {price}, date: {date}")
         realized_pnl = 0
         remaining_to_sell = quantity
+        closed_lots = []
 
-        while remaining_to_sell > 0 and self.entries:
-            entry = self.entries[0]
-            if entry['quantity'] > remaining_to_sell:
-                entry['quantity'] -= remaining_to_sell
+        while remaining_to_sell > 0 and self.open_lots:
+            lot = self.open_lots[0]
+            if lot['quantity'] > remaining_to_sell:
+                # Partial lot closure
+                realized_pnl += remaining_to_sell * (price - lot['price'])
+                closed_lots.append({
+                    'buy_date': lot['date'],
+                    'sell_date': date,
+                    'quantity': remaining_to_sell,
+                    'buy_price': lot['price'],
+                    'sell_price': price,
+                    'pnl': remaining_to_sell * (price - lot['price'])
+                })
+                lot['quantity'] -= remaining_to_sell
                 self.current_quantity -= remaining_to_sell
-                realized_pnl += remaining_to_sell * (price - entry['price'])
                 remaining_to_sell = 0
             else:
-                realized_pnl += entry['quantity'] * (price - entry['price'])
-                remaining_to_sell -= entry['quantity']
-                self.current_quantity -= entry['quantity']
-                self.entries.pop(0)
-
-        logging.debug(f"Sold {quantity - remaining_to_sell} units, remaining to sell: {remaining_to_sell}")
+                # Full lot closure
+                realized_pnl += lot['quantity'] * (price - lot['price'])
+                closed_lots.append({
+                    'buy_date': lot['date'],
+                    'sell_date': date,
+                    'quantity': lot['quantity'],
+                    'buy_price': lot['price'],
+                    'sell_price': price,
+                    'pnl': lot['quantity'] * (price - lot['price'])
+                })
+                remaining_to_sell -= lot['quantity']
+                self.current_quantity -= lot['quantity']
+                self.open_lots.pop(0)
 
         if remaining_to_sell > 0:
             logging.error(f"Not enough quantity to sell for target quantity: {quantity}")
-            raise ValueError(f"Not enough quantity to sell for {quantity}. See logs")
+            raise ValueError(f"Not enough quantity to sell for {quantity} for {self.asset}. Check logs")
 
-        logging.debug(f"Quantity adjusted. Current quantity: {self.current_quantity}, Realized PnL: {realized_pnl}")
-        return realized_pnl
+        return realized_pnl, closed_lots
 
-    def calculate_value(self, current_price: np.ndarray) -> float:
+    def calculate_value(self, current_price: float) -> float:
         """
         Calculate the current value of the position.
 
         Args:
-            current_price (np.ndarray): The current price per unit of the asset.
+            current_price (float): The current price per unit of the asset.
 
         Returns:
             float: The total value of the position.
@@ -105,16 +130,16 @@ class Position:
         Returns:
             float: The unrealized PnL of the position.
         """
-        return sum((current_price - entry['price']) * entry['quantity'] for entry in self.entries)
+        return sum((current_price - lot['price']) * lot['quantity'] for lot in self.open_lots)
 
-    def get_positions(self) -> List[Dict]:
+    def get_open_lots(self) -> List[Dict]:
         """
-        Get a list of all entries in the position.
+        Get a list of all open lots in the position.
 
         Returns:
-            List[Dict]: A list of dictionaries, each representing an entry with quantity, price, and date.
+            List[Dict]: A list of dictionaries, each representing an open lot with quantity, price, and date.
         """
-        return self.entries
+        return self.open_lots
 
     def get_current_quantity(self) -> int:
         """
@@ -132,7 +157,6 @@ class Position:
         Returns:
             str: The asset identifier (e.g., stock symbol).
         """
-        logging.debug(f"Getting asset for position: {self.asset}")
         return self.asset
 
     def __repr__(self):

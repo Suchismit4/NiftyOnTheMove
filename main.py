@@ -51,7 +51,7 @@ if __name__ == "__main__":
                  volatility    = 25,
                  portfolio_at_risk = 0.001,
                  min_momentum      =  0.,
-                 max_stocks        = 20
+                 max_stocks        = 15
                  )
 
     # Create a Strato instance for a strategy
@@ -77,5 +77,3 @@ if __name__ == "__main__":
 
     print(f'Starting Portfolio Value: ₹10,00,000')
     print(f'Final Portfolio Value: ₹{results[-1]:.2f}')
-    
-    

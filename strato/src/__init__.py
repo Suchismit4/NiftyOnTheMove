@@ -28,7 +28,6 @@ from .flow.position import Position
 from .struct.indicator import IndicatorCalculator, Indicator
 from .flow.order import Order
 
-
 def log_trade(date, symbol, action, price, size, change):
     """
     Log details of a trade for analysis.
@@ -157,6 +156,9 @@ class Strato:
 
             signals = {s.name: {} for s in self.strategies}
 
+            # Execute pending orders from the previous day
+            self._execute_pending_orders(date, daily_data)
+
             # Loop through strategies in priority executing signals
             # Generate trading signals for the current day
             for strategy in self.strategies:
@@ -164,9 +166,6 @@ class Strato:
                 strategy.step(date_idx, self.indicator_calculator, self.positions, self.symbol_to_index, benchmark=self.benchmark)
                 signals[strategy.name] = strategy.get_signals()
 
-            # Execute pending orders from the previous day
-            self._execute_pending_orders(date, daily_data)
-            
             # Calculate and record portfolio value and cash balance
             portfolio_value = self.calculate_portfolio_value(daily_data=daily_data)
             portfolio_values.append(portfolio_value)
@@ -176,7 +175,7 @@ class Strato:
             # Process new signals and create orders
             for signal in signals.values():
                 self._process_signals(date, signal, daily_data)
-            
+
             for symbol in self.symbol_to_index.keys():
                 self._handle_invalid_price(symbol=symbol, date=date, price=daily_data[self.symbol_to_index[symbol], self.feature_to_index['Open']])
             
@@ -195,7 +194,7 @@ class Strato:
         for sym in self.positions:
             pos = self.positions[sym]
             
-            if len(pos.get_positions()) >= 0:
+            if len(pos.get_open_lots()) >= 0:
                 pos.bars_since_entry += 1 # fix this to reset
 
     def _execute_pending_orders(self, date, daily_data):
@@ -212,40 +211,50 @@ class Strato:
         # Collect all orders across all symbols
         for sym in self.orders:
             for order in self.orders[sym]:
-                if order.order_type == Strategy.SELL:
+                if order.order_type == Strategy.SELL and (sym, order) not in sell_orders:
                     sell_orders.append((sym, order))
-                elif order.order_type == Strategy.BUY:
+                elif order.order_type == Strategy.BUY and (sym, order) not in buy_orders:
                     buy_orders.append((sym, order))
 
         # Process all sell orders first
         for sym, order in sell_orders:
-            change, qty, execution_price, action = order.execute(daily_data, self.feature_to_index, date)
+            change, qty, execution_price, action, realized_pnl, closed_lots = order.execute(daily_data, self.feature_to_index, date)
             self.cash += change
-            log_trade(date, sym, action, execution_price, qty, change)
-            self.trade_history.append({
-                'date': date,
-                'symbol': sym,
-                'action': action,
-                'price': execution_price,
-                'size': qty,
-                'cash (after)': self.cash,
-            })
+
+            for closed_lot in closed_lots:
+                self.trade_history.append({
+                    'type': 'TRADE_CLOSED',
+                    'symbol': sym,
+                    'buy_date': closed_lot['buy_date'],
+                    'sell_date': closed_lot['sell_date'],
+                    'quantity': closed_lot['quantity'],
+                    'buy_price': closed_lot['buy_price'],
+                    'sell_price': closed_lot['sell_price'],
+                    'pnl': closed_lot['pnl'],
+                    'cash_after': self.cash
+                })
             self.orders[sym].remove(order)
+
+            logging.info(f"TRADE - ORDER EXECUTED - {date} for {sym} SELL MKT @{execution_price}::{qty}")
+
 
         # Process all buy orders next
         for sym, order in buy_orders:
-            change, qty, execution_price, action = order.execute(daily_data, self.feature_to_index, date)
+            change, qty, execution_price, action, _, _ = order.execute(daily_data, self.feature_to_index, date)
             self.cash += change
-            log_trade(date, sym, action, execution_price, qty, change)
+
             self.trade_history.append({
+                'type': 'ACTION',
                 'date': date,
                 'symbol': sym,
                 'action': action,
                 'price': execution_price,
                 'size': qty,
-                'cash (after)': self.cash,
+                'cash_after': self.cash,
             })
             self.orders[sym].remove(order)
+
+            logging.info(f"TRADE - ORDER EXECUTED - {date} for {sym} BUY MKT @{execution_price}::{qty}")
 
     def _process_signals(self, date, signals, daily_data):
         """
@@ -365,7 +374,7 @@ class Strato:
         logging.debug("Getting current state of Strato")
         state = {
             'cash': self.cash,
-            'positions': {symbol: position.get_positions() for symbol, position in self.positions.items()},
+            'positions': {symbol: position.get_open_lots() for symbol, position in self.positions.items()},
             'indicators': {name: values.tolist() for name, values in self.indicator_calculator.indicator_values.items()}
         }
         logging.debug(f"Current state: {state}")
@@ -487,6 +496,8 @@ class Strato:
             drawdowns_path = os.path.join(temp_dir, 'drawdowns.png')
             self._plot_drawdowns(dates, portfolio_values, drawdowns_path)
 
+            trade_analysis = self._analyze_trades()
+
             # Generate LaTeX document
             latex_file_path = os.path.join(temp_dir, 'backtest_report.tex')
             self._generate_latex_document(
@@ -505,7 +516,29 @@ class Strato:
                 max_drawdown,
                 normalized_annual_return,
                 weekly_returns_path,
-                drawdowns_path
+                drawdowns_path,
+                all_total_trades=trade_analysis['all_trades']['total_trades'],
+                all_trades_per_year=trade_analysis['all_trades']['trades_per_year'],
+                all_average_return=trade_analysis['all_trades']['average_return_per_trade'],
+                winning_total_trades=trade_analysis['winning_trades']['total_trades'],
+                winning_trades_per_year=trade_analysis['winning_trades']['trades_per_year'],
+                winning_average_return=trade_analysis['winning_trades']['average_return_per_trade'],
+                winning_best_trade=trade_analysis['winning_trades']['best_trade'],
+                winning_max_duration=trade_analysis['winning_trades']['max_duration'],
+                winning_min_duration=trade_analysis['winning_trades']['min_duration'],
+                losing_total_trades=trade_analysis['losing_trades']['total_trades'],
+                losing_trades_per_year=trade_analysis['losing_trades']['trades_per_year'],
+                losing_average_return=trade_analysis['losing_trades']['average_return_per_trade'],
+                losing_worst_trade=trade_analysis['losing_trades']['worst_trade'],
+                losing_max_duration=trade_analysis['losing_trades']['max_duration'],
+                losing_min_duration=trade_analysis['losing_trades']['min_duration'],
+                win_rate=trade_analysis['win_rate'] * 100,
+                lose_rate=trade_analysis['lose_rate'] * 100,
+                profit_factor=trade_analysis['profit_factor'],
+                win_loss_ratio=trade_analysis['win_loss_ratio'],
+                payoff_ratio=trade_analysis['payoff_ratio'],
+                cpc_index=trade_analysis['cpc_index'],
+                expectancy=trade_analysis['expectancy']
             )
 
             # Compile LaTeX to PDF
@@ -524,92 +557,146 @@ class Strato:
             shutil.rmtree(temp_dir)
 
     def _generate_latex_document(self, filepath, portfolio_value_path, cumulative_returns_path,
-                                returns_quantile_3m_path, returns_quantile_6m_path, returns_quantile_12m_path,
-                                returns_distribution_path, monthly_returns_heatmap_path,
-                                yearly_returns_path, rolling_sharpe_path, rolling_volatility_path,
-                                sharpe_ratio, max_drawdown, normalized_annual_return, weekly_returns_path, drawdowns_path):
-            latex_content = r"""
-            \documentclass{article}
-            \usepackage{graphicx}
-            \usepackage{xcolor}
-            \pagecolor[rgb]{0,0,0} 
-            \color[rgb]{0.96078431372, 0.96470588235, 0.98039215686} 
-            \usepackage{geometry}
-            \usepackage{subfig}
-            \geometry{a4paper, margin=0.8in}
-            \begin{document}
-            \title{%s}
-            \author{}
-            \date{}
-            \maketitle
+                                 returns_quantile_3m_path, returns_quantile_6m_path, returns_quantile_12m_path,
+                                 returns_distribution_path, monthly_returns_heatmap_path,
+                                 yearly_returns_path, rolling_sharpe_path, rolling_volatility_path,
+                                 sharpe_ratio, max_drawdown, normalized_annual_return, weekly_returns_path,
+                                 drawdowns_path, all_total_trades, all_trades_per_year, all_average_return,
+                                 winning_total_trades, winning_trades_per_year, winning_average_return,
+                                 winning_best_trade, winning_max_duration, winning_min_duration,
+                                 losing_total_trades, losing_trades_per_year, losing_average_return,
+                                 losing_worst_trade, losing_max_duration, losing_min_duration,
+                                 win_rate, lose_rate, profit_factor, win_loss_ratio, payoff_ratio,
+                                 cpc_index, expectancy):
+        latex_content = r"""
+        \documentclass{article}
+        \usepackage{graphicx}
+        \usepackage{xcolor}
+        \pagecolor[rgb]{0,0,0} 
+        \color[rgb]{0.96078431372, 0.96470588235, 0.98039215686} 
+        \usepackage{geometry}
+        \usepackage{subfig}
+        \geometry{a4paper, margin=0.8in}
+        \begin{document}
+        \title{%s}
+        \author{}
+        \date{}
+        \maketitle
 
-            \section*{Summary Statistics}
-            \begin{itemize}
-            \item Sharpe Ratio: %.2f
-            \item Maximum Drawdown: %.2f %%
-            \item Normalized Annual Return: %.2f %%
-            \end{itemize}
+        \section*{Summary Statistics}
+        \begin{tabular}{|l|r|}
+        \hline
+        Metric & Value \\
+        \hline
+        Sharpe Ratio & %.2f \\
+        Maximum Drawdown [per] & %.2f\\
+        Normalized Annual Return  [per] & %.2f  \\
+        \hline
+        \end{tabular}
 
-            \section*{Performance}
-            \begin{figure}[h!]
-            \centering
-            \subfloat[Cumulative Returns]{\includegraphics[width=0.48\textwidth]{%s}}
-            \hfill
-            \subfloat[Portfolio Value]{\includegraphics[width=0.48\textwidth]{%s}}
-            \caption{Cumulative Returns and Portfolio Value Over Time}
-            \end{figure}
-
-            \section*{}
-            \begin{figure}[h!]
-            \centering
-            \subfloat[Rolling Sharpe Ratio]{\includegraphics[width=0.48\textwidth]{%s}}
-            \hfill
-            \subfloat[Rolling Volatility]{\includegraphics[width=0.48\textwidth]{%s}}
-            \caption{Rolling Sharpe Ratio and Volatility (6 months)}
-            \end{figure}
-
-            \section*{Return Quantiles}
-            \begin{figure}[h!]
-            \centering
-            \subfloat[3-Month]{\includegraphics[width=0.32\textwidth]{%s}}
-            \hfill
-            \subfloat[6-Month]{\includegraphics[width=0.32\textwidth]{%s}}
-            \hfill
-            \subfloat[12-Month]{\includegraphics[width=0.32\textwidth]{%s}}
-            \caption{Return Quantiles Over Different Time Spreads}
-            \end{figure}
-
-            \section*{Return Analysis}
-            \begin{figure}[h!]
-            \centering
-            \subfloat[Monthly Returns Heatmap]{\includegraphics[width=0.48\textwidth]{%s}}
-            \hfill
-            \subfloat[Returns Distribution]{\includegraphics[width=0.48\textwidth]{%s}}
-            \caption{Monthly Returns Heatmap and Returns Distribution}
-            \end{figure}
-
-            \begin{figure}[h!]
-            \centering
-            \subfloat[Yearly Returns]{\includegraphics[width=0.48\textwidth]{%s}}
-            \hfill
-            \subfloat[Weekly Returns]{\includegraphics[width=0.48\textwidth]{%s}}
-            \caption{Yearly and Weekly Returns}
-            \end{figure}
-
-            \begin{figure}[h!]
-            \centering
-            \includegraphics[width=0.95\textwidth]{%s}
-            \caption{Drawdowns in Portfolio Value Over Time}
-            \end{figure}
-
-            \end{document}
-            """ % (self.name, sharpe_ratio, max_drawdown, normalized_annual_return, cumulative_returns_path, portfolio_value_path,
-                rolling_sharpe_path, rolling_volatility_path, returns_quantile_3m_path, returns_quantile_6m_path, returns_quantile_12m_path,
-                monthly_returns_heatmap_path, returns_distribution_path, yearly_returns_path, weekly_returns_path, drawdowns_path)
+        \section*{Trade Analysis (Experimental)}
+        \begin{tabular}{|l|l|r|}
+        \hline
+        & Metric & Value \\
+        \hline
+        \textbf{All Trades} & Total Trades & %d \\
+        & Trades per Year & %.2f \\
+        & Average Return per Trade [per] & %.2f \\
+        \hline
+        \textbf{Winning Trades} & Total Trades & %d \\
+        & Trades per Year & %.2f \\
+        & Average Return per Trade [per] & %.2f \\
+        & Best Trade [per] & %.2f \\
+        & Maximum Duration & %d days \\
+        & Minimum Duration & %d days \\
+        \hline
+        \textbf{Losing Trades} & Total Trades & %d \\
+        & Trades per Year & %.2f \\
+        & Average Return per Trade [per] & %.2f \\
+        & Worst Trade [per] & %.2f \\
+        & Maximum Duration & %d days \\
+        & Minimum Duration & %d days \\
+        \hline
+        \textbf{Overall Metrics} & Win Rate [per] & %.2f \\
+        & Lose Rate [per] & %.2f \\
+        & Profit Factor & %.2f \\
+        & Win/Loss Ratio & %.2f \\
+        & Payoff Ratio & %.2f \\
+        & CPC Index & %.2f \\
+        & Expectancy & %.2f \\
+        \hline
+        \end{tabular}
 
 
-            with open(filepath, 'w') as f:
-                f.write(latex_content)
+        \section*{Performance}
+        \begin{figure}[h!]
+        \centering
+        \subfloat[Cumulative Returns]{\includegraphics[width=0.48\textwidth]{%s}}
+        \hfill
+        \subfloat[Portfolio Value]{\includegraphics[width=0.48\textwidth]{%s}}
+        \caption{Cumulative Returns and Portfolio Value Over Time}
+        \end{figure}
+
+        \section*{}
+        \begin{figure}[h!]
+        \centering
+        \subfloat[Rolling Sharpe Ratio]{\includegraphics[width=0.48\textwidth]{%s}}
+        \hfill
+        \subfloat[Rolling Volatility]{\includegraphics[width=0.48\textwidth]{%s}}
+        \caption{Rolling Sharpe Ratio and Volatility (6 months)}
+        \end{figure}
+
+        \section*{Return Quantiles}
+        \begin{figure}[h!]
+        \centering
+        \subfloat[3-Month]{\includegraphics[width=0.32\textwidth]{%s}}
+        \hfill
+        \subfloat[6-Month]{\includegraphics[width=0.32\textwidth]{%s}}
+        \hfill
+        \subfloat[12-Month]{\includegraphics[width=0.32\textwidth]{%s}}
+        \caption{Return Quantiles Over Different Time Spreads}
+        \end{figure}
+
+        \section*{Return Analysis}
+        \begin{figure}[h!]
+        \centering
+        \subfloat[Monthly Returns Heatmap]{\includegraphics[width=0.48\textwidth]{%s}}
+        \hfill
+        \subfloat[Returns Distribution]{\includegraphics[width=0.48\textwidth]{%s}}
+        \caption{Monthly Returns Heatmap and Returns Distribution}
+        \end{figure}
+
+        \begin{figure}[h!]
+        \centering
+        \subfloat[Yearly Returns]{\includegraphics[width=0.48\textwidth]{%s}}
+        \hfill
+        \subfloat[Weekly Returns]{\includegraphics[width=0.48\textwidth]{%s}}
+        \caption{Yearly and Weekly Returns}
+        \end{figure}
+
+        \begin{figure}[h!]
+        \centering
+        \includegraphics[width=0.95\textwidth]{%s}
+        \caption{Drawdowns in Portfolio Value Over Time}
+        \end{figure}
+
+        \end{document}
+        """ % (self.name, sharpe_ratio, max_drawdown, normalized_annual_return,
+               all_total_trades, all_trades_per_year, all_average_return,
+               winning_total_trades, winning_trades_per_year, winning_average_return,
+               winning_best_trade, winning_max_duration, winning_min_duration,
+               losing_total_trades, losing_trades_per_year, losing_average_return,
+               losing_worst_trade, losing_max_duration, losing_min_duration,
+               win_rate, lose_rate, profit_factor, win_loss_ratio, payoff_ratio,
+               cpc_index, expectancy,
+               cumulative_returns_path, portfolio_value_path,
+               rolling_sharpe_path, rolling_volatility_path,
+               returns_quantile_3m_path, returns_quantile_6m_path, returns_quantile_12m_path,
+               monthly_returns_heatmap_path, returns_distribution_path,
+               yearly_returns_path, weekly_returns_path, drawdowns_path)
+
+        with open(filepath, 'w') as f:
+            f.write(latex_content)
 
     def _plot_portfolio_value(self, dates, portfolio_values, save_path):
         """
@@ -943,3 +1030,90 @@ class Strato:
         plt.tight_layout()
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         plt.close()
+
+    def _analyze_trades(self):
+        closed_trades = [trade for trade in self.trade_history if trade['type'] == 'TRADE_CLOSED']
+        winners = [trade for trade in closed_trades if trade['pnl'] > 0]
+        losers = [trade for trade in closed_trades if trade['pnl'] <= 0]
+
+        total_trades = len(closed_trades)
+        if total_trades == 0:
+            return {
+                'all_trades': {},
+                'winning_trades': {},
+                'losing_trades': {},
+                'win_rate': 0,
+                'lose_rate': 0,
+                'profit_factor': float('inf'),
+                'win_loss_ratio': float('inf'),
+                'payoff_ratio': float('inf'),
+                'cpc_index': 0,
+                'expectancy': 0,
+            }
+
+        total_years = (closed_trades[-1]['sell_date'] - closed_trades[0][
+            'buy_date']).days / 365.25 if closed_trades else 1
+
+        win_rate = len(winners) / total_trades
+        lose_rate = len(losers) / total_trades
+
+        # Calculate average win and loss as a percentage of the initial buy price
+        average_win = np.mean([
+            (trade['pnl']) for trade in winners if trade['buy_price'] != 0]) if winners else 0
+        average_loss = sum(
+            (trade['pnl']) for trade in losers if trade['buy_price'] != 0) / len(
+            losers) if losers else 0
+
+        best_trade = max(
+            (trade['pnl'] if trade['buy_price'] != 0 else 0 for trade in winners), default=0)
+        worst_trade = min(
+            (trade['pnl'] if trade['buy_price'] != 0 else 0 for trade in losers), default=0)
+
+        max_duration_winners = max(((trade['sell_date'] - trade['buy_date']).days for trade in winners if
+                                    trade['sell_date'] and trade['buy_date']), default=0)
+        min_duration_winners = min(((trade['sell_date'] - trade['buy_date']).days for trade in winners if
+                                    trade['sell_date'] and trade['buy_date']), default=0)
+        max_duration_losers = max(((trade['sell_date'] - trade['buy_date']).days for trade in losers if
+                                   trade['sell_date'] and trade['buy_date']), default=0)
+        min_duration_losers = min(((trade['sell_date'] - trade['buy_date']).days for trade in losers if
+                                   trade['sell_date'] and trade['buy_date']), default=0)
+
+        profit_factor = sum(trade['pnl'] for trade in winners) / abs(
+            sum(trade['pnl'] for trade in losers)) if losers else float('inf')
+        win_loss_ratio = win_rate / lose_rate if lose_rate > 0 else float('inf')
+        payoff_ratio = average_win / abs(average_loss) if average_loss != 0 else float('inf')
+        cpc_index = (win_rate * payoff_ratio) - 1
+        expectancy = (win_rate * average_win) - (lose_rate * abs(average_loss))
+
+        return {
+            'all_trades': {
+                'total_trades': total_trades,
+                'trades_per_year': total_trades / total_years,
+                'average_return_per_trade': sum(
+                    (trade['pnl'] * 100 / trade['buy_price']) if trade['buy_price'] != 0 else 0 for trade in
+                    closed_trades) / total_trades if total_trades > 0 else 0,
+            },
+            'winning_trades': {
+                'total_trades': len(winners),
+                'trades_per_year': len(winners) / total_years,
+                'average_return_per_trade': average_win,
+                'best_trade': best_trade,
+                'max_duration': max_duration_winners,
+                'min_duration': min_duration_winners,
+            },
+            'losing_trades': {
+                'total_trades': len(losers),
+                'trades_per_year': len(losers) / total_years,
+                'average_return_per_trade': average_loss,
+                'worst_trade': worst_trade,
+                'max_duration': max_duration_losers,
+                'min_duration': min_duration_losers,
+            },
+            'win_rate': win_rate,
+            'lose_rate': lose_rate,
+            'profit_factor': profit_factor,
+            'win_loss_ratio': win_loss_ratio,
+            'payoff_ratio': payoff_ratio,
+            'cpc_index': cpc_index,
+            'expectancy': expectancy,
+        }
