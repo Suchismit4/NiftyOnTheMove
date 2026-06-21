@@ -1,27 +1,6 @@
+Update: Folded into Hindsight. This is stale.
+
 # NiftyOnTheMove
-
-# Strato Backtesting Library for Equities (+ Strategy)
-
-Welcome to the **Strato Backtesting Library**! This library is designed to help you backtest trading strategies with efficiency and precision. Whether you're a quantitative trader or a data scientist, Strato provides the tools to simulate trading strategies against historical data, analyze performance, and generate comprehensive reports.
-
-## Table of Contents 📚
-
-- [Overview](#overview)
-- [Installation](#installation)
-- [Quick Start](#quick-start)
-- [Core Concepts](#core-concepts)
-  - [Strato Class](#strato-class)
-  - [Position Management](#position-management)
-  - [Orders and Execution](#orders-and-execution)
-  - [Indicators](#indicators)
-  - [Strategies](#strategies)
-  - [Report Generation](#report-generation)
-- [Example Strategy: StocksOnTheMoveByAndrewsClenow](#example-strategy-stocksonthmovebyandrewsclenow)
-- [Logging](#logging)
-- [Contributing](#contributing)
-- [License](#license)
-
-## Overview
 
 Strato is a comprehensive backtesting library that allows you to:
 
